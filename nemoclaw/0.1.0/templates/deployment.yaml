@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nemoclaw.fullname" . }}
+  labels:
+    {{- include "nemoclaw.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nemoclaw.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw.selectorLabels" . | nindent 8 }}
+        {{- if not .Values.istioInjection }}
+        sidecar.istio.io/inject: "false"
+        {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 998
+        runAsGroup: 998
+        fsGroup: 998
+      containers:
+        - name: nemoclaw
+          image: {{ include "nemoclaw.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+          # Proven entrypoint (verified live on PCAI): seed openclaw state from
+          # the ConfigMap (static token + litellm provider), then run the
+          # gateway in the FOREGROUND on port 18789, bound to LAN, with the
+          # static token. `openclaw gateway run` respawns on crash.
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              STATE=/sandbox/.openclaw
+              mkdir -p "$STATE/agents/main/agent" "$STATE/workspace"
+              cp /etc/openclaw-config/openclaw.json "$STATE/openclaw.json"
+              chmod 600 "$STATE/openclaw.json"
+              # Copy the control-ui to the writable root and inject auto-token.js
+              # (a same-origin file, since the gateway CSP `script-src 'self'`
+              # blocks inline scripts) so the bare dashboard URL auto-connects.
+              UI=/usr/lib/node_modules/openclaw/dist/control-ui
+              mkdir -p "{{ .Values.ui.root }}"
+              cp -r "$UI/." "{{ .Values.ui.root }}/"
+              node /etc/openclaw-config/patch-ui.js "{{ .Values.ui.root }}" "$(cat /etc/gateway-token)"
+              exec openclaw gateway run                 --bind {{ .Values.gateway.bind }}                 --port {{ .Values.gateway.port }}                 --token "$(cat /etc/gateway-token)"
+          env:
+            - name: HOME
+              value: /sandbox
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: token
+          ports:
+            - name: dashboard
+              containerPort: {{ .Values.gateway.port }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.gateway.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.gateway.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: openclaw-config
+              mountPath: /etc/openclaw-config
+              readOnly: true
+            - name: gateway-token
+              mountPath: /etc/gateway-token
+              subPath: token
+              readOnly: true
+            - name: openclaw-state
+              mountPath: /sandbox/.openclaw
+      volumes:
+        - name: openclaw-config
+          configMap:
+            name: {{ include "nemoclaw.fullname" . }}-openclaw-config
+        - name: gateway-token
+          secret:
+            secretName: {{ include "nemoclaw.fullname" . }}-gateway-token
+        - name: openclaw-state
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "nemoclaw.fullname" . }}-openclaw-state
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

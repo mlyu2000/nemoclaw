@@ -1,0 +1,141 @@
+# NemoClaw (OpenClaw) gateway — PCAI defaults.
+# Most values are PCAI-specific so a single `deploy.sh` provisions everything
+# with no manual steps. Override any of these for a different environment.
+
+replicaCount: 1
+
+# ── Container image ─────────────────────────────────────────────────────────
+# Pinned to the exact digest from the NemoClaw blueprint (amd64). The image is
+# already cached on the PCAI nodes, so IfNotPresent avoids re-pulls.
+image:
+  repository: ghcr.io/nvidia/openshell-community/sandboxes/openclaw
+  tag: latest
+  # Full digest override (takes precedence over repository:tag). Leave empty to
+  # use repository:tag. The blueprint pins this digest for security.
+  digest: sha256:b3d832b596ab6b7184a9dcb4ae93337ca32851a4f93b00765cc12de26baa3a9a
+  pullPolicy: IfNotPresent
+
+# ── Gateway (dashboard) ─────────────────────────────────────────────────────
+# The OpenClaw gateway serves the dashboard on this port. "lan" bind exposes it
+# on 0.0.0.0 so a Kubernetes Service can reach it (loopback would block that).
+gateway:
+  port: 18789
+  bind: lan
+  # STATIC gateway token. Baked at deploy time into the ConfigMap (openclaw.json)
+  # and the Secret, so it persists and is retrievable without a manual curl.
+  # deploy.sh generates a strong random value and injects it here. If you set a
+  # value here manually, deploy.sh will keep it.
+  token: "CHANGE_ME-GENERATED-AT-DEPLOY"
+  # Allow pairing from ALL devices (requirement: allow pairing for all devices,
+  # skip authorization policy for simplicity).
+  dangerouslyDisableDeviceAuth: true
+  allowedOrigins: "*"
+
+# ── LLM endpoint (PCAI internal LiteLLM) ─────────────────────────────────────
+# The active task points NemoClaw at the internal litellm service (ClusterIP),
+# not the external portal URL. model = qwen3-8-27b-int4-dflash2-r2 (confirmed
+# responsive via litellm fallback).
+litellm:
+  # Internal service name (resolves from any namespace via cluster DNS).
+  baseUrl: "http://litellm-helm.<litellm-namespace>.svc.cluster.local:4000/v1"
+  model: "qwen3-8-27b-int4-dflash2-r2"
+  contextWindow: 131072
+  maxTokens: 8192
+  # The LiteLLM master key. deploy.sh reads it from the cluster secret below
+  # and injects it here so the deployment is fully automated. The committed value
+  # is a placeholder — the real key is NEVER committed. If you set it here, deploy.sh keeps it.
+  apiKey: ""
+  # Where the master key lives in the cluster (used by deploy.sh to auto-fetch).
+  keyRef:
+    namespace: "<litellm-namespace>"
+    secret: "litellm-helm-masterkey"
+    key: "masterkey"
+
+# ── Dashboard URL (EZUA portal / VirtualService) ────────────────────────────
+# The dashboard is exposed via an Istio VirtualService on the ezaf-gateway.
+# The full public URL is https://<host> — deterministic, so the EzAppConfig can
+# carry it and the portal shows working credentials immediately.
+ui:
+  # Writable root the gateway serves the control-ui from (on the PVC). The
+  # boot command copies the bundled control-ui here and runs patch-ui.js to
+  # inject auto-token.js, so the bare dashboard URL auto-connects.
+  root: "/sandbox/.openclaw/ui"
+
+domain:
+  # Suffix for the EZUA domain. The full host is <service>.<suffix>.
+  suffix: "<your-pcai-domain>"
+  # Hostname prefix for this app. Full host = nemoclaw.<your-pcai-domain>
+  host: "nemoclaw.<your-pcai-domain>"
+  # Istio gateway that fronts external traffic.
+  istioGateway: "istio-system/ezaf-gateway"
+
+# ── Service ─────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 18789
+
+# ── Ingress / VirtualService (EZUA portal exposure) ─────────────────────────
+# The chart also renders a VirtualService (see templates/virtualservice.yaml) so
+# the dashboard is reachable even before the EzApp operator reconciles.
+ingress:
+  enabled: true
+
+# ── EzApp operator endpoint (drives the UI "Open" button) ───────────────────
+# The EzApp operator reads this block from the EzAppConfig's spec.values,
+# creates the `<release>-<app>-virtual-service` Istio VirtualService, and sets
+# status.endpoints.external = https://<endpoint>. That status field is what the
+# EZUA portal UI uses to show the working URL + "Open" button, and it is what
+# the operator health-checks. This is the PCAI platform convention (see the
+# litellm/mlflow/kuberay EzAppConfigs). Do NOT remove this block.
+ezua:
+  virtualService:
+    # Full public host. Full URL = https://<endpoint>.
+    endpoint: "nemoclaw.<your-pcai-domain>"
+    # Istio gateway that fronts external traffic.
+    istioGateway: "istio-system/ezaf-gateway"
+
+# ── Persistence (agent state) ───────────────────────────────────────────────
+# Persists /sandbox/.openclaw (sessions, workspace) across pod restarts. The
+# static token + URL do NOT depend on this — they are deterministic (baked),
+# so they persist by construction. This PVC is for the agent's working state.
+persistence:
+  enabled: true
+  storageClassName: "<pcai-storageclass>"
+  size: 10Gi
+
+# ── Resources ───────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# ── Scheduling (the gateway needs no GPU; LLM runs on litellm) ──────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ── Istio ───────────────────────────────────────────────────────────────────
+# The target namespace (ui) has istio-injection enabled, so the gateway pod gets
+# a sidecar automatically. Set inject=false to opt out.
+istioInjection: true
+
+# ── EzAppConfig (EZUA portal registration) ──────────────────────────────────
+# deploy.sh creates this CR with the rendered values. The EzAppConfig operator
+# then runs `helm install` for this chart. The token + dashboard URL are carried
+# in its `values` so the portal shows working credentials automatically.
+ezapp:
+  enabled: true
+  # Namespace where the release is installed (the "ui" namespace exists on PCAI).
+  namespace: ui
+  createNamespace: "false"
+  # Name of the app as shown in the EZUA portal.
+  appName: nemoclaw
+  label: NemoClaw
+  description: "NemoClaw (OpenClaw) agent gateway — static dashboard URL + static gateway token, LLM via internal LiteLLM (qwen3-8-27b-int4-dflash2)."
+  category: dataScience
+  timeout: 45m
+  backoffLimit: 3

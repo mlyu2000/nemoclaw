@@ -1,0 +1,25 @@
+# NemoClaw PCAI deploy — version control
+#
+# We commit ONLY the reusable helm chart + the deploy automation.
+# Everything below is generated at deploy time, is environment-specific,
+# or contains live cluster state / secrets and must NEVER be committed.
+
+# ── Upstream source clone (NVIDIA/NemoClaw) — 177MB, has its own git repo ──
+NemoClaw/
+
+# ── Deploy-time working copies (the live baked values.yaml holds the real
+#    litellm master key — MUST NOT be committed) ─────────────────────────────
+work/
+build/
+
+# ── Transient inspect/debug scratch files ───────────────────────────────────
+tmp-*.yaml
+*.raw
+/tmp/
+
+# ── OS / editor / python noise ──────────────────────────────────────────────
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/

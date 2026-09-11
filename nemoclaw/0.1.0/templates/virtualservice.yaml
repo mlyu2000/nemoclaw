@@ -1,0 +1,24 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "nemoclaw.fullname" . }}-vs
+  labels:
+    {{- include "nemoclaw.labels" . | nindent 4 }}
+  annotations:
+    hpe-ezua/created-by: ezua
+spec:
+  hosts:
+    - {{ include "nemoclaw.domain" . }}
+  # Bind to the external ezaf-gateway so the EZUA operator registers
+  # status.endpoints.external (drives the "Open" button in the UI).
+  gateways:
+    - {{ .Values.domain.istioGateway }}
+  http:
+    - name: dashboard
+      route:
+        - destination:
+            host: {{ include "nemoclaw.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+{{- end }}

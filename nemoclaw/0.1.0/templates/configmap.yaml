@@ -1,0 +1,68 @@
+# Renders the exact openclaw.json the gateway needs, pre-seeded with the static
+# token, LAN bind, device-auth disabled (all-device pairing), and the PCAI
+# internal LiteLLM provider. The pod copies this into /sandbox/.openclaw before
+# `openclaw gateway run` starts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nemoclaw.fullname" . }}-openclaw-config
+  labels:
+    {{- include "nemoclaw.labels" . | nindent 4 }}
+data:
+  openclaw.json: |
+    {
+      "wizard": {
+        "lastRunAt": "2026-09-03T00:00:00Z",
+        "lastRunVersion": "2026.3.11",
+        "lastRunCommand": "onboard",
+        "lastRunMode": "local"
+      },
+      "agents": {
+        "defaults": {
+          "model": { "primary": "inference/{{ .Values.litellm.model }}" },
+          "skipBootstrap": true,
+          "thinkingDefault": "off",
+          "workspace": "/sandbox/.openclaw/workspace"
+        }
+      },
+      "models": {
+        "mode": "merge",
+        "providers": {
+          "inference": {
+            "baseUrl": {{ .Values.litellm.baseUrl | quote }},
+            "apiKey": {{ .Values.litellm.apiKey | quote }},
+            "api": "openai-completions",
+            "models": [
+              {
+                "id": {{ .Values.litellm.model | quote }},
+                "name": "inference/{{ .Values.litellm.model }}",
+                "reasoning": false,
+                "input": ["text"],
+                "contextWindow": {{ .Values.litellm.contextWindow }},
+                "maxTokens": {{ .Values.litellm.maxTokens }}
+              }
+            ]
+          }
+        }
+      },
+      "channels": { "defaults": {} },
+      "update": { "checkOnStart": false },
+      "gateway": {
+        "mode": "local",
+        "bind": "{{ .Values.gateway.bind }}",
+        "port": {{ .Values.gateway.port }},
+        "controlUi": {
+          "allowInsecureAuth": true,
+          "dangerouslyDisableDeviceAuth": {{ .Values.gateway.dangerouslyDisableDeviceAuth }},
+          "allowedOrigins": [{{ .Values.gateway.allowedOrigins | quote }}],
+          "root": "{{ .Values.ui.root }}"
+        },
+        "auth": { "token": {{ .Values.gateway.token | quote }} }
+      }
+    }
+
+  # Boot-time UI patcher: copies the control-ui to a writable dir and injects
+  # a same-origin auto-token.js (CSP `script-src 'self'` blocks inline scripts)
+  # that auto-connects the dashboard from the bare URL (the "Open" button URL).
+  patch-ui.js: |-
+{{ .Files.Get "files/patch-ui.js" | indent 4 }}

@@ -1,0 +1,13 @@
+NemoClaw deployed (release {{ .Release.Name }} in namespace {{ .Release.Namespace }}).
+
+Dashboard URL:  {{ include "nemoclaw.dashboardUrl" . }}
+Gateway:        bind={{ .Values.gateway.bind }}, port {{ .Values.gateway.port }}, static token
+                (Secret {{ include "nemoclaw.fullname" . }}-gateway-token)
+LLM:            {{ .Values.litellm.model }} via {{ .Values.litellm.baseUrl }}
+
+Verify:
+  kubectl -n {{ .Release.Namespace }} get deploy,svc,pvc
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "nemoclaw.fullname" . }} --tail=50
+  # in-cluster dashboard check (200 = up):
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "nemoclaw.fullname" . }} -- \
+    curl -s -o /dev/null -w '%%{http_code}\n' "http://127.0.0.1:{{ .Values.gateway.port }}/"
