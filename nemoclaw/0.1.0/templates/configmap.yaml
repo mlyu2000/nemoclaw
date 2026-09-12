@@ -50,9 +50,23 @@ data:
         ,
         "telegram": {
           "enabled": true,
+          {{- if .Values.telegram.allowAll }}
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "allowFrom": ["*"],
+          "accounts": {
+            "default": {
+              "botToken": {{ .Values.telegram.botToken | quote }},
+              "dmPolicy": "open",
+              "groupPolicy": "open",
+              "allowFrom": ["*"]
+            }
+          }
+          {{- else }}
           "accounts": {
             "default": { "botToken": {{ .Values.telegram.botToken | quote }} }
           }
+          {{- end }}
         }{{- end }}
       },
       "update": { "checkOnStart": false },

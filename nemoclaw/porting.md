@@ -43,6 +43,13 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
   `telegram.testChatId`). It is bounded (20s) and non-fatal (`|| true`), so it
   can never block the deploy; results land in
   `/sandbox/.openclaw/telegram-verify.log`.
+- **Access control** — `telegram.allowAll` (default `true`) sets
+  `dmPolicy`/`groupPolicy=open` + `allowFrom=["*"]` so **anyone** can use the
+  bot (no per-device pairing approval). Note: with `dmPolicy=open` the OpenClaw
+  config validator *requires* `allowFrom` to include `"*"` — the chart adds it
+  automatically. Set `allowAll=false` to fall back to OpenClaw's default
+  "pairing" gate (each new user must send a pairing code, approved via
+  `openclaw pairing approve --channel telegram <CODE>`).
 
 ## PCAI-specific adaptations
 

@@ -80,6 +80,10 @@ works on any PCAI platform / domain.
   first start a **one-off validation** runs (`files/telegram-verify.js`):
   `getMe` proves the token + egress, then a single test message is sent to a
   chat (non-fatal; see `telegram-verify.log`)
+- `telegram.allowAll=true` (default) — the bot accepts **anyone** (no per-user
+  pairing approval): `dmPolicy`/`groupPolicy=open` + `allowFrom=["*"]`. Set
+  `false` to use OpenClaw's default "pairing" gate (new users must send a
+  pairing code and an operator approves it).
 
 ## Verify
 

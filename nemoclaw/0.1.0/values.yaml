@@ -77,6 +77,12 @@ domain:
 # to prove the channel is functioning.
 telegram:
   enabled: true
+  # Allow ANYONE to use the bot (no per-user pairing approval). When true the
+  # channel runs with dmPolicy=open + groupPolicy=open, so any DM or group
+  # message is processed by the agent without a pairing code. When false,
+  # OpenClaw's default "pairing" gate applies (a new user must send their
+  # pairing code and an operator approves it).
+  allowAll: true
   # Bot token from @BotFather (format <id>:<secret>). Placeholder — the real
   # token is injected at deploy time; the real token is NEVER committed.
   botToken: "CHANGE_ME-telegram-bot-token"
