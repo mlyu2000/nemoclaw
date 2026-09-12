@@ -41,7 +41,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "nemoclaw.domain" -}}
-{{ .Values.domain.host }}
+nemoclaw.{{ .Values.domain.base }}
 {{- end }}
 
 {{- define "nemoclaw.dashboardUrl" -}}

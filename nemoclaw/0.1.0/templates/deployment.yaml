@@ -48,6 +48,13 @@ spec:
               mkdir -p "{{ .Values.ui.root }}"
               cp -r "$UI/." "{{ .Values.ui.root }}/"
               node /etc/openclaw-config/patch-ui.js "{{ .Values.ui.root }}" "$(cat /etc/gateway-token)"
+              {{- if .Values.telegram.enabled }}
+              # One-off Telegram channel validation (bounded, non-fatal, BEFORE the
+              # gateway starts so it doesn't race the gateway's own long-poll):
+              # getMe proves the token + egress, then a single test message proves
+              # delivery. Exits 0 even on failure, so it can't block the deploy.
+              node /etc/openclaw-config/telegram-verify.js >> /sandbox/.openclaw/telegram-verify.log 2>&1 || true
+              {{- end }}
               exec openclaw gateway run                 --bind {{ .Values.gateway.bind }}                 --port {{ .Values.gateway.port }}                 --token "$(cat /etc/gateway-token)"
           env:
             - name: HOME
@@ -57,6 +64,19 @@ spec:
                 secretKeyRef:
                   name: {{ include "nemoclaw.fullname" . }}-gateway-token
                   key: token
+            {{- if .Values.telegram.enabled }}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: telegram-bot-token
+            {{- with .Values.telegram.testChatId }}
+            - name: TELEGRAM_TEST_CHAT_ID
+              value: {{ . | quote }}
+            {{- end }}
+            - name: TELEGRAM_TEST_MESSAGE
+              value: {{ .Values.telegram.testMessage | quote }}
+            {{- end }}
           ports:
             - name: dashboard
               containerPort: {{ .Values.gateway.port }}

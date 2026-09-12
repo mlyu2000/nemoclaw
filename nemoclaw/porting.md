@@ -1,7 +1,7 @@
 # NemoClaw (OpenClaw) — PCAI port
 
 This folder ports **NVIDIA NemoClaw / OpenClaw** (an always-on AI-agent gateway)
-to HPE Private Cloud AI (PCAI / AIE PCAI) as a BYOA Helm import, following the
+to HPE Private Cloud AI (PCAI) as a BYOA Helm import, following the
 [frameworks repo structure](https://github.com/ai-solution-eng/frameworks).
 
 ## Layout (per the frameworks guideline)
@@ -34,12 +34,22 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
   that sets the Control UI token and connects. So the bare URL lands on an
   already-authenticated, working dashboard.
 - **Persistent state** — `/sandbox/.openclaw` (sessions, workspace) on the
-  `nfs-csi` PVC.
+  PVC (`<pcai-storageclass>`, default `nfs-csi`).
+- **Telegram channel (optional)** — `telegram.enabled` + `telegram.botToken`
+  register the channel in `openclaw.json`. On each pod start a **one-off
+  validation** (`files/telegram-verify.js`) runs *before* the gateway starts:
+  `getMe` proves the token + outbound egress to `api.telegram.org`, then a
+  single test message is sent to a chat (the most recent from `getUpdates`, or
+  `telegram.testChatId`). It is bounded (20s) and non-fatal (`|| true`), so it
+  can never block the deploy; results land in
+  `/sandbox/.openclaw/telegram-verify.log`.
 
 ## PCAI-specific adaptations
 
-- **Domain / gateway**: exposed on the `ezaf-gateway` Istio gateway, host
-  `nemoclaw.<your-pcai-domain>` (suffix `<your-pcai-domain>`).
+- **Domain / gateway**: exposed on the `ezaf-gateway` Istio gateway. The base
+  domain is a deploy-time variable (`domain.base`), so the dashboard host
+  `nemoclaw.<domain.base>` is fully dynamic and not tied to any single PCAI
+  platform.
 - **EzAppConfig / EZUA**: registered via an `EzAppConfig` CR
   (`ezconfig.hpe.ezaf.com`) so the PCAI portal shows the app + "Open" button and
   health. `spec.values` carries the full baked `values.yaml`;

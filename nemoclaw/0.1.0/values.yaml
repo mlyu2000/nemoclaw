@@ -62,12 +62,30 @@ ui:
   root: "/sandbox/.openclaw/ui"
 
 domain:
-  # Suffix for the EZUA domain. The full host is <service>.<suffix>.
-  suffix: "<your-pcai-domain>"
-  # Hostname prefix for this app. Full host = nemoclaw.<your-pcai-domain>
-  host: "nemoclaw.<your-pcai-domain>"
+  # PCAI base domain (dynamic). The dashboard host is derived as "nemoclaw.<base>".
+  # deploy.sh replaces the placeholder with the DOMAIN env var at deploy time, so
+  # the same chart works on any PCAI platform / domain (not tied to one cluster).
+  base: "<your-pcai-domain>"
   # Istio gateway that fronts external traffic.
   istioGateway: "istio-system/ezaf-gateway"
+
+# ── Telegram channel ─────────────────────────────────────────────────────────
+# When enabled with a valid bot token, the gateway long-polls the Telegram Bot
+# API on startup and can send/receive messages through the NemoClaw agent.
+# deploy.sh bakes the real token from the TELEGRAM_BOT_TOKEN env var (never
+# committed). On first start a ONE-OFF validation sends a single test message
+# to prove the channel is functioning.
+telegram:
+  enabled: true
+  # Bot token from @BotFather (format <id>:<secret>). Placeholder — the real
+  # token is injected at deploy time; the real token is NEVER committed.
+  botToken: "CHANGE_ME-telegram-bot-token"
+  # Target chat_id for the one-off test message: a user who sent /start to the
+  # bot, or a group id. If empty, the validation uses the most recent chat from
+  # getUpdates.
+  testChatId: ""
+  # Text of the one-off test message.
+  testMessage: "NemoClaw Telegram channel is online (one-off validation)"
 
 # ── Service ─────────────────────────────────────────────────────────────────
 service:

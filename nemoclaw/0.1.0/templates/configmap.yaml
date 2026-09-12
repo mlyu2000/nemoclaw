@@ -45,7 +45,16 @@ data:
           }
         }
       },
-      "channels": { "defaults": {} },
+      "channels": {
+        "defaults": {}{{- if .Values.telegram.enabled }}
+        ,
+        "telegram": {
+          "enabled": true,
+          "accounts": {
+            "default": { "botToken": {{ .Values.telegram.botToken | quote }} }
+          }
+        }{{- end }}
+      },
       "update": { "checkOnStart": false },
       "gateway": {
         "mode": "local",
@@ -66,3 +75,11 @@ data:
   # that auto-connects the dashboard from the bare URL (the "Open" button URL).
   patch-ui.js: |-
 {{ .Files.Get "files/patch-ui.js" | indent 4 }}
+
+  {{- if .Values.telegram.enabled }}
+  # One-off Telegram channel verification (runs once per pod start, before the
+  # gateway). Reads TELEGRAM_BOT_TOKEN from the environment, runs getMe
+  # (validity + egress), then sends a single test message to a chat id.
+  telegram-verify.js: |-
+{{ .Files.Get "files/telegram-verify.js" | indent 4 }}
+  {{- end }}

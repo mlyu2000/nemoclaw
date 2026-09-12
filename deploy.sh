@@ -10,6 +10,8 @@ LITELLM_NAMESPACE="${LITELLM_NAMESPACE:-<litellm-namespace>}"   # ns holding the
 CHARTMUSEUM_NAMESPACE="${CHARTMUSEUM_NAMESPACE:-ez-chartmuseum-ns}" # ns holding chartmuseum
 DOMAIN="${DOMAIN:-}"            # your PCAI base domain (e.g. aie.example.lab) -> dashboard host = nemoclaw.<DOMAIN>
 STORAGECLASS="${STORAGECLASS:-nfs-csi}"  # PVC storage class
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"       # optional: enables the Telegram channel
+TELEGRAM_TEST_CHAT_ID="${TELEGRAM_TEST_CHAT_ID:-}" # optional: chat for the one-off test message
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 CHART="$ROOT/nemoclaw/0.1.0"
 BUILD="$ROOT/build"
@@ -42,10 +44,13 @@ WORK="$ROOT/work"
 rm -rf "$WORK" && mkdir -p "$WORK"
 cp -r "$CHART" "$WORK/nemoclaw"
 python3 - "$WORK/nemoclaw/values.yaml" "$MASTERKEY" <<'PY'
-import sys, re
+import sys, re, os
 path, key = sys.argv[1], sys.argv[2]
+DOMAIN = os.environ.get("DOMAIN", "")
+LITELLM_NAMESPACE = os.environ.get("LITELLM_NAMESPACE", "")
+STORAGECLASS = os.environ.get("STORAGECLASS", "")
 s = open(path).read()
-s = s.replace('apiKey: "***"', f'apiKey: "***"')
+s = s.replace('apiKey: ""', 'apiKey: "' + key + '"')
 # Fill PCAI-generic placeholders with the real values for this environment.
 s = s.replace('"nemoclaw.<your-pcai-domain>"', f'"nemoclaw.{DOMAIN}"')
 s = s.replace('"<your-pcai-domain>"', f'"{DOMAIN}"')
@@ -53,6 +58,11 @@ s = s.replace('"<litellm-namespace>"', f'"{LITELLM_NAMESPACE}"')
 s = s.replace('"http://litellm-helm.<litellm-namespace>.svc.cluster.local:4000/v1"',
               f'"http://litellm-helm.{LITELLM_NAMESPACE}.svc.cluster.local:4000/v1"')
 s = s.replace('"<pcai-storageclass>"', f'"{STORAGECLASS}"')
+if os.environ.get("TELEGRAM_BOT_TOKEN"):
+    s = s.replace('botToken: "CHANGE_ME-telegram-bot-token"',
+                  'botToken: "' + os.environ["TELEGRAM_BOT_TOKEN"] + '"')
+    s = s.replace('testChatId: ""',
+                  'testChatId: "' + os.environ.get("TELEGRAM_TEST_CHAT_ID", "") + '"')
 open(path, "w").write(s)
 PY
 grep -c "apiKey" "$WORK/nemoclaw/values.yaml" >/dev/null
