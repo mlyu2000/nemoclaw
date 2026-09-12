@@ -61,6 +61,11 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
 - **Istio sidecar**: the gateway pod gets a sidecar (namespace
   `istio-injection: enabled`); the sidecar forwards `X-Forwarded-For`, which the
   auto-connect script handles transparently.
+- **Memory**: the OpenClaw gateway's V8 heap is capped by the container memory
+  limit (~521MB at 1Gi). Enabling a chat channel (Telegram long-poll + in-memory
+  update queue) pushes it past that → `JavaScript heap out of memory` at
+  startup. `resources.limits.memory` is therefore **2Gi** (gives Node a ~1.4GB
+  heap). Without a channel the gateway runs comfortably at 1Gi.
 
 ## Deploy
 

@@ -129,7 +129,11 @@ resources:
     memory: 512Mi
   limits:
     cpu: "1"
-    memory: 1Gi
+    # 2Gi: the OpenClaw gateway's V8 heap is capped by the container memory
+    # limit (~521MB at 1Gi). Enabling a chat channel (e.g. Telegram long-poll +
+    # in-memory update queue) pushes it past that, causing a JS-heap OOM at
+    # startup. 2Gi gives Node a ~1.4GB heap, which the gateway + channel need.
+    memory: 2Gi
 
 # ── Scheduling (the gateway needs no GPU; LLM runs on litellm) ──────────────
 nodeSelector: {}
