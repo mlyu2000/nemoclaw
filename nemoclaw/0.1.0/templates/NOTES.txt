@@ -5,9 +5,10 @@ Gateway:        bind={{ .Values.gateway.bind }}, port {{ .Values.gateway.port }}
                 (Secret {{ include "nemoclaw.fullname" . }}-gateway-token)
 LLM:            {{ .Values.litellm.model }} via {{ .Values.litellm.baseUrl }}
 
-Verify:
-  kubectl -n {{ .Release.Namespace }} get deploy,svc,pvc
-  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "nemoclaw.fullname" . }} --tail=50
-  # in-cluster dashboard check (200 = up):
-  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "nemoclaw.fullname" . }} -- \
-    curl -s -o /dev/null -w '%%{http_code}\n' "http://127.0.0.1:{{ .Values.gateway.port }}/"
+Verify (via the PCAI portal — no kubectl):
+  1. PCAI portal > Applications > {{ include "nemoclaw.fullname" . }} -> status should be "ready / ok".
+     Open the app's "Logs" tab for the gateway logs.
+  2. Click the "Open" button (or {{ include "nemoclaw.dashboardUrl" . }}) ->
+     it should show "Health OK" and a working Chat section.
+  3. Telegram channel (if enabled): the bot sends a one-off test message on
+     first deploy; afterwards it replies to DMs / group messages.

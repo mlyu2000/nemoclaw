@@ -1,6 +1,7 @@
 # NemoClaw (OpenClaw) gateway — PCAI defaults.
-# Most values are PCAI-specific so a single `deploy.sh` provisions everything
-# with no manual steps. Override any of these for a different environment.
+# Most values are PCAI-specific. The PCAI portal (BYOA import) prompts for the
+# deploy-time values (domain, litellm key, telegram token, etc.); everything
+# else ships with these defaults. Override any of these for a different env.
 
 replicaCount: 1
 
@@ -21,10 +22,10 @@ image:
 gateway:
   port: 18789
   bind: lan
-  # STATIC gateway token. Baked at deploy time into the ConfigMap (openclaw.json)
+  # STATIC gateway token. Baked at import time into the ConfigMap (openclaw.json)
   # and the Secret, so it persists and is retrievable without a manual curl.
-  # deploy.sh generates a strong random value and injects it here. If you set a
-  # value here manually, deploy.sh will keep it.
+  # The PCAI portal generates a strong random value and injects it here. If you
+  # set a value here manually, it is kept.
   token: "CHANGE_ME-GENERATED-AT-DEPLOY"
   # Allow pairing from ALL devices (requirement: allow pairing for all devices,
   # skip authorization policy for simplicity).
@@ -41,11 +42,11 @@ litellm:
   model: "qwen3-8-27b-int4-dflash2-r2"
   contextWindow: 131072
   maxTokens: 8192
-  # The LiteLLM master key. deploy.sh reads it from the cluster secret below
-  # and injects it here so the deployment is fully automated. The committed value
-  # is a placeholder — the real key is NEVER committed. If you set it here, deploy.sh keeps it.
+  # The LiteLLM master key. The PCAI portal reads it from the cluster secret below
+  # (or you paste it in the values form) so the import is fully automated. The
+  # committed value is a placeholder — the real key is NEVER committed.
   apiKey: ""
-  # Where the master key lives in the cluster (used by deploy.sh to auto-fetch).
+  # Where the master key lives in the cluster (used by the portal to auto-fetch).
   keyRef:
     namespace: "<litellm-namespace>"
     secret: "litellm-helm-masterkey"
@@ -63,8 +64,8 @@ ui:
 
 domain:
   # PCAI base domain (dynamic). The dashboard host is derived as "nemoclaw.<base>".
-  # deploy.sh replaces the placeholder with the DOMAIN env var at deploy time, so
-  # the same chart works on any PCAI platform / domain (not tied to one cluster).
+  # The PCAI portal replaces the placeholder with the base domain at import time,
+  # so the same chart works on any PCAI platform / domain (not tied to one cluster).
   base: "<your-pcai-domain>"
   # Istio gateway that fronts external traffic.
   istioGateway: "istio-system/ezaf-gateway"
@@ -72,9 +73,9 @@ domain:
 # ── Telegram channel ─────────────────────────────────────────────────────────
 # When enabled with a valid bot token, the gateway long-polls the Telegram Bot
 # API on startup and can send/receive messages through the NemoClaw agent.
-# deploy.sh bakes the real token from the TELEGRAM_BOT_TOKEN env var (never
-# committed). On first start a ONE-OFF validation sends a single test message
-# to prove the channel is functioning.
+# The PCAI portal bakes the real token from the values form (never committed).
+# On first start a ONE-OFF validation sends a single test message to prove the
+# channel is functioning.
 telegram:
   enabled: true
   # Allow ANYONE to use the bot (no per-user pairing approval). When true the
@@ -152,7 +153,7 @@ affinity: {}
 istioInjection: true
 
 # ── EzAppConfig (EZUA portal registration) ──────────────────────────────────
-# deploy.sh creates this CR with the rendered values. The EzAppConfig operator
+# The PCAI portal creates this CR with the rendered values. The EzAppConfig operator
 # then runs `helm install` for this chart. The token + dashboard URL are carried
 # in its `values` so the portal shows working credentials automatically.
 ezapp:
