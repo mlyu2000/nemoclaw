@@ -1,17 +1,11 @@
 # NemoClaw on PCAI — Helm import
 
 Deploys **NemoClaw** (the OpenClaw agent gateway) to **HPE Private Cloud AI
-(PCAI)** as a Helm import, exposed through the EZUA portal (`EzAppConfig`) and
-an Istio `VirtualService`. The LLM is the PCAI-internal LiteLLM proxy running
-`qwen3-8-27b-int4-dflash2-r2`.
+(PCAI)** as a Helm import, exposed through the EZUA portal and
+an Istio `VirtualService`. The LLM is the PCAI-internal LiteLLM proxy.
 
-Everything in this repo is managed **through the PCAI web UI** — there is no
-`kubectl` and no CLI. You import the app and verify it in the portal.
+Everything in this repo is managed **through the PCAI web UI**. You import the app and verify it in the portal.
 
-The repo follows the
-[frameworks repo structure](https://github.com/ai-solution-eng/frameworks):
-one framework folder (`nemoclaw/`) holding a version folder with the chart and
-the chart tarball, plus a `logo.svg` and a `porting.md` at the root.
 
 ## Layout
 
@@ -39,16 +33,13 @@ nemoclaw/
 | Deployment     | `nemoclaw`               | OpenClaw gateway (istio sidecar)                    |
 | VirtualService | `nemoclaw-vs`            | `https://nemoclaw.<your-pcai-domain>`               |
 
-Plus an **`EzAppConfig`** that registers the app with the EZUA portal so the
-dashboard URL + token are shown to users automatically.
 
 ## Deploy (via the PCAI portal — no kubectl)
 
 1. **Open the PCAI portal → Applications → Import / Deploy** (the BYOA /
    "Bring Your Own App" flow).
 2. **Point it at this framework** — upload the `nemoclaw-0.1.0.tgz` chart (the
-   portal also picks up `logo.svg` and `porting.md`). The portal creates the
-   `EzAppConfig` and installs the chart for you.
+   portal also picks up `logo.png`).
 3. **Fill in the values** in the portal's values form (the chart's defaults
    carry placeholders that the UI prompts for):
    - **`domain.base`** — your PCAI base domain (e.g. `aie.example.lab`); the
