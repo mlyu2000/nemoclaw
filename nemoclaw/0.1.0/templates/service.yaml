@@ -9,7 +9,18 @@ spec:
   selector:
     {{- include "nemoclaw.selectorLabels" . | nindent 4 }}
   ports:
+    {{- if eq .Values.agent "openclaw" }}
     - name: dashboard
       port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.targetPort }}
       protocol: TCP
+    {{- else if eq .Values.agent "hermes" }}
+    - name: hermes-dashboard
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.hermesDashboardPort }}
+      protocol: TCP
+    - name: hermes-api
+      port: {{ .Values.service.hermesApiPort }}
+      targetPort: {{ .Values.hermes.apiPort }}
+      protocol: TCP
+    {{- end }}

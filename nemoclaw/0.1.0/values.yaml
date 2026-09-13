@@ -1,170 +1,127 @@
-# NemoClaw (OpenClaw) gateway — PCAI defaults.
-# Most values are PCAI-specific. The PCAI portal (BYOA import) prompts for the
-# deploy-time values (domain, litellm key, telegram token, etc.); everything
-# else ships with these defaults. Override any of these for a different env.
+# NemoClaw PCAI Helm chart — pick ONE agent: openclaw (default) or hermes.
+# Mutually exclusive: exactly one agent container per pod.
+# Both agents can use the same Telegram bot token (top-level telegram.* block)
+# and the same LiteLLM endpoint.
+#
+# Backward-compatible: default agent = openclaw (the prior chart behavior).
 
 replicaCount: 1
 
-# ── Container image ─────────────────────────────────────────────────────────
-# Pinned to the exact digest from the NemoClaw blueprint (amd64). The image is
-# already cached on the PCAI nodes, so IfNotPresent avoids re-pulls.
+# ── Agent selector ───────────────────────────────────────────────────────────
+# Exactly one of:
+#   openclaw  — NemoClaw / OpenClaw gateway (dashboard on port 18789, LLM via
+#               litellm, Telegram via openclaw channel).
+#   hermes    — Hermes Agent (Nous Research, OpenAI-compatible API on port
+#               8642 + web dashboard on port 18790, Telegram via hermes
+#               platform). Uses the NemoClaw Hermes sandbox image.
+agent: openclaw
+
+# ── Container image (OpenClaw) ───────────────────────────────────────────────
 image:
   repository: ghcr.io/nvidia/openshell-community/sandboxes/openclaw
   tag: latest
-  # Full digest override (takes precedence over repository:tag). Leave empty to
-  # use repository:tag. The blueprint pins this digest for security.
   digest: sha256:b3d832b596ab6b7184a9dcb4ae93337ca32851a4f93b00765cc12de26baa3a9a
   pullPolicy: IfNotPresent
 
-# ── Gateway (dashboard) ─────────────────────────────────────────────────────
-# The OpenClaw gateway serves the dashboard on this port. "lan" bind exposes it
-# on 0.0.0.0 so a Kubernetes Service can reach it (loopback would block that).
+# ── Gateway (OpenClaw dashboard) ─────────────────────────────────────────────
 gateway:
   port: 18789
   bind: lan
-  # STATIC gateway token. Baked at import time into the ConfigMap (openclaw.json)
-  # and the Secret, so it persists and is retrievable without a manual curl.
-  # The PCAI portal generates a strong random value and injects it here. If you
-  # set a value here manually, it is kept.
   token: "CHANGE_ME-GENERATED-AT-DEPLOY"
-  # Allow pairing from ALL devices (requirement: allow pairing for all devices,
-  # skip authorization policy for simplicity).
   dangerouslyDisableDeviceAuth: true
   allowedOrigins: "*"
 
 # ── LLM endpoint (PCAI internal LiteLLM) ─────────────────────────────────────
-# The active task points NemoClaw at the internal litellm service (ClusterIP),
-# not the external portal URL. model = qwen3-8-27b-int4-dflash2-r2 (confirmed
-# responsive via litellm fallback).
 litellm:
-  # Internal service name (resolves from any namespace via cluster DNS).
   baseUrl: "http://litellm-helm.<litellm-namespace>.svc.cluster.local:4000/v1"
   model: "qwen3-8-27b-int4-dflash2-r2"
   contextWindow: 131072
   maxTokens: 8192
-  # The LiteLLM master key. The PCAI portal reads it from the cluster secret below
-  # (or you paste it in the values form) so the import is fully automated. The
-  # committed value is a placeholder — the real key is NEVER committed.
-  apiKey: ""
-  # Where the master key lives in the cluster (used by the portal to auto-fetch).
+  apiKey: "***"
   keyRef:
     namespace: "<litellm-namespace>"
     secret: "litellm-helm-masterkey"
     key: "masterkey"
 
-# ── Dashboard URL (EZUA portal / VirtualService) ────────────────────────────
-# The dashboard is exposed via an Istio VirtualService on the ezaf-gateway.
-# The full public URL is https://<host> — deterministic, so the EzAppConfig can
-# carry it and the portal shows working credentials immediately.
+# ── Dashboard UI root (OpenClaw only) ────────────────────────────────────────
 ui:
-  # Writable root the gateway serves the control-ui from (on the PVC). The
-  # boot command copies the bundled control-ui here and runs patch-ui.js to
-  # inject auto-token.js, so the bare dashboard URL auto-connects.
   root: "/sandbox/.openclaw/ui"
 
 domain:
-  # PCAI base domain (dynamic). The dashboard host is derived as "nemoclaw.<base>".
-  # The PCAI portal replaces the placeholder with the base domain at import time,
-  # so the same chart works on any PCAI platform / domain (not tied to one cluster).
   base: "<your-pcai-domain>"
-  # Istio gateway that fronts external traffic.
   istioGateway: "istio-system/ezaf-gateway"
 
-# ── Telegram channel ─────────────────────────────────────────────────────────
-# When enabled with a valid bot token, the gateway long-polls the Telegram Bot
-# API on startup and can send/receive messages through the NemoClaw agent.
-# The PCAI portal bakes the real token from the values form (never committed).
-# On first start a ONE-OFF validation sends a single test message to prove the
-# channel is functioning.
+# ── Telegram (shared by both agents) ─────────────────────────────────────────
 telegram:
   enabled: true
-  # Allow ANYONE to use the bot (no per-user pairing approval). When true the
-  # channel runs with dmPolicy=open + groupPolicy=open, so any DM or group
-  # message is processed by the agent without a pairing code. When false,
-  # OpenClaw's default "pairing" gate applies (a new user must send their
-  # pairing code and an operator approves it).
   allowAll: true
-  # Bot token from @BotFather (format <id>:<secret>). Placeholder — the real
-  # token is injected at deploy time; the real token is NEVER committed.
   botToken: "CHANGE_ME-telegram-bot-token"
-  # Target chat_id for the one-off test message: a user who sent /start to the
-  # bot, or a group id. If empty, the validation uses the most recent chat from
-  # getUpdates.
   testChatId: ""
-  # Text of the one-off test message.
   testMessage: "NemoClaw Telegram channel is online (one-off validation)"
 
-# ── Service ─────────────────────────────────────────────────────────────────
+# ── Hermes Agent (used when agent: hermes) ───────────────────────────────────
+hermes:
+  image:
+    repository: ghcr.io/nvidia/nemoclaw/hermes-sandbox
+    tag: latest
+    digest: sha256:0d07845fa3b02a0657d28e134eb2e1f4a96cc6260e2538f3d4eafe831c7e5c17
+    pullPolicy: IfNotPresent
+  apiPort: 8642
+  dashboardPort: 18790
+  dashboardInternalPort: 19119
+  apiServerKey: "CHANGE_ME-HERMES-API-KEY"
+  model: "qwen3-8-27b-int4-dflash2-r2"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ── Service ──────────────────────────────────────────────────────────────────
 service:
   type: ClusterIP
   port: 80
   targetPort: 18789
+  hermesApiPort: 8642
+  hermesDashboardPort: 18790
 
-# ── Ingress / VirtualService (EZUA portal exposure) ─────────────────────────
-# The chart also renders a VirtualService (see templates/virtualservice.yaml) so
-# the dashboard is reachable even before the EzApp operator reconciles.
 ingress:
   enabled: true
 
-# ── EzApp operator endpoint (drives the UI "Open" button) ───────────────────
-# The EzApp operator reads this block from the EzAppConfig's spec.values,
-# creates the `<release>-<app>-virtual-service` Istio VirtualService, and sets
-# status.endpoints.external = https://<endpoint>. That status field is what the
-# EZUA portal UI uses to show the working URL + "Open" button, and it is what
-# the operator health-checks. This is the PCAI platform convention (see the
-# litellm/mlflow/kuberay EzAppConfigs). Do NOT remove this block.
 ezua:
   virtualService:
-    # Full public host. Full URL = https://<endpoint>.
     endpoint: "nemoclaw.<your-pcai-domain>"
-    # Istio gateway that fronts external traffic.
     istioGateway: "istio-system/ezaf-gateway"
 
-# ── Persistence (agent state) ───────────────────────────────────────────────
-# Persists /sandbox/.openclaw (sessions, workspace) across pod restarts. The
-# static token + URL do NOT depend on this — they are deterministic (baked),
-# so they persist by construction. This PVC is for the agent's working state.
 persistence:
   enabled: true
   storageClassName: "<pcai-storageclass>"
   size: 10Gi
 
-# ── Resources ───────────────────────────────────────────────────────────────
+# ── Resources (OpenClaw gateway) ────────────────────────────────────────────
 resources:
   requests:
     cpu: 250m
     memory: 512Mi
   limits:
     cpu: "1"
-    # 2Gi: the OpenClaw gateway's V8 heap is capped by the container memory
-    # limit (~521MB at 1Gi). Enabling a chat channel (e.g. Telegram long-poll +
-    # in-memory update queue) pushes it past that, causing a JS-heap OOM at
-    # startup. 2Gi gives Node a ~1.4GB heap, which the gateway + channel need.
     memory: 2Gi
 
-# ── Scheduling (the gateway needs no GPU; LLM runs on litellm) ──────────────
 nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# ── Istio ───────────────────────────────────────────────────────────────────
-# The target namespace (ui) has istio-injection enabled, so the gateway pod gets
-# a sidecar automatically. Set inject=false to opt out.
 istioInjection: true
 
-# ── EzAppConfig (EZUA portal registration) ──────────────────────────────────
-# The PCAI portal creates this CR with the rendered values. The EzAppConfig operator
-# then runs `helm install` for this chart. The token + dashboard URL are carried
-# in its `values` so the portal shows working credentials automatically.
 ezapp:
   enabled: true
-  # Namespace where the release is installed (the "ui" namespace exists on PCAI).
   namespace: ui
   createNamespace: "false"
-  # Name of the app as shown in the EZUA portal.
   appName: nemoclaw
   label: NemoClaw
-  description: "NemoClaw (OpenClaw) agent gateway — static dashboard URL + static gateway token, LLM via internal LiteLLM (qwen3-8-27b-int4-dflash2)."
+  description: "NemoClaw / Hermes Agent — single-agent PCAI deployment with Telegram channel."
   category: dataScience
   timeout: 45m
   backoffLimit: 3

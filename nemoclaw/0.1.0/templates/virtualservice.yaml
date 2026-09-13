@@ -10,15 +10,22 @@ metadata:
 spec:
   hosts:
     - {{ include "nemoclaw.domain" . }}
-  # Bind to the external ezaf-gateway so the EZUA operator registers
-  # status.endpoints.external (drives the "Open" button in the UI).
   gateways:
     - {{ .Values.domain.istioGateway }}
   http:
+    {{- if eq .Values.agent "openclaw" }}
     - name: dashboard
       route:
         - destination:
             host: {{ include "nemoclaw.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
             port:
               number: {{ .Values.service.port }}
+    {{- else if eq .Values.agent "hermes" }}
+    - name: hermes-dashboard
+      route:
+        - destination:
+            host: {{ include "nemoclaw.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+    {{- end }}
 {{- end }}

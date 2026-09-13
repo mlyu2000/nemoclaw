@@ -47,3 +47,11 @@ nemoclaw.{{ .Values.domain.base }}
 {{- define "nemoclaw.dashboardUrl" -}}
 https://{{ include "nemoclaw.domain" . }}
 {{- end }}
+
+{{- define "hermes.image" -}}
+{{- if .Values.hermes.image.digest -}}
+{{ .Values.hermes.image.repository }}@{{ .Values.hermes.image.digest }}
+{{- else -}}
+{{ .Values.hermes.image.repository }}:{{ .Values.hermes.image.tag }}
+{{- end -}}
+{{- end }}
