@@ -66,7 +66,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_TEST_CHAT_ID = os.environ.get("TELEGRAM_TEST_CHAT_ID", "")
 s = open(path).read()
 # Replace the apiKey placeholder with the real master key.
-s = s.replace('apiKey: "***"', 'apiKey: "' + key + '"')
+s = s.replace('apiKey: "CHANGE_ME-litellm-master-key"', 'apiKey: "' + key + '"')
 # Fill PCAI-generic placeholders with the real values for this environment.
 s = s.replace('"nemoclaw.<your-pcai-domain>"', f'"nemoclaw.{DOMAIN}"')
 s = s.replace('"<your-pcai-domain>"', f'"{DOMAIN}"')
