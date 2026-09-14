@@ -143,10 +143,16 @@ data:
     HERMES_TELEGRAM_DM_POLICY="${HERMES_TELEGRAM_DM_POLICY:-pairing}"
     HERMES_TELEGRAM_GROUP_POLICY="${HERMES_TELEGRAM_GROUP_POLICY:-pairing}"
 
+    # Quoted heredoc: the only expansion we want is the $(cat ...) command
+    # substitutions, which run when the file is written (secrets are read from
+    # the mounted Secret files at that moment).
+    # API_SERVER_KEY is intentionally NOT written here: it is provided as a
+    # container env var (Secret-mounted) and hermes reads os.getenv
+    # ("API_SERVER_KEY"). Keeping it out of the file avoids any secret
+    # landing in $HERMES_HOME.
     cat > "$ENV_FILE" <<ENVEOF
     API_SERVER_PORT=${HERMES_API_PORT}
     API_SERVER_HOST=0.0.0.0
-    API_SERVER_KEY=***
     ENVEOF
     chmod 600 "$ENV_FILE"
 
@@ -169,14 +175,14 @@ data:
       custom:
         name: custom
         base_url: "${HERMES_LITELLM_BASE_URL}"
-        api_key: ${HERMES_LITELLM_API_KEY}
+        api_key: $(cat /etc/litellm-api-key)
         default_model: ${HERMES_LITELLM_MODEL}
         discover_models: true
     custom_providers:
       - name: custom
         provider: custom
         base_url: "${HERMES_LITELLM_BASE_URL}"
-        api_key: ${HERMES_LITELLM_API_KEY}
+        api_key: $(cat /etc/litellm-api-key)
         discover_models: true
     platforms:
       api_server:
