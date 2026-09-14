@@ -8,8 +8,12 @@ Gateway:         bind={{ .Values.gateway.bind }}, port {{ .Values.gateway.port }
 LLM:             {{ .Values.litellm.model }} via {{ .Values.litellm.baseUrl }}
 {{- else if eq .Values.agent "hermes" }}
 API:             OpenAI-compatible on port {{ .Values.hermes.apiPort }}
-Dashboard:       port {{ .Values.hermes.dashboardPort }} (internal {{ .Values.hermes.dashboardInternalPort }})
+Dashboard:       port {{ .Values.hermes.dashboardPort }} (basic-auth login)
 API Key:         (Secret {{ include "nemoclaw.fullname" . }}-gateway-token, key: hermes-api-key)
+{{- if .Values.hermes.dashboardAuth.enabled }}
+Dashboard PW:    (Secret {{ include "nemoclaw.fullname" . }}-gateway-token,
+                 key: hermes-dashboard-password — `helm get values {{ .Release.Name }} -n {{ .Release.Namespace }} -o yaml`)
+{{- end }}
 LLM:             {{ .Values.litellm.model }} via {{ .Values.litellm.baseUrl }}
 {{- end }}
 

@@ -113,21 +113,38 @@ spec:
               set -euo pipefail
               HERMES_HOME=/sandbox/.hermes
               mkdir -p "$HERMES_HOME"
+              # Seed config.yaml + .env + merged CA bundle (secrets from the
+              # mounted Secret files).
               bash /etc/openclaw-config/seed-hermes-config.sh
-              if [ -f /usr/local/lib/nemoclaw/hermes-start.sh ]; then
-                source /usr/local/lib/nemoclaw/hermes-start.sh
-                exec nemoclaw_hermes_start
-              fi
-              exec hermes gateway run \
-                --api-port {{ .Values.hermes.apiPort }} \
-                --dashboard-port {{ .Values.hermes.dashboardPort }} \
-                --dashboard-internal-port {{ .Values.hermes.dashboardInternalPort }} \
-                --api-server-key "$(cat /etc/hermes-api-key)" \
-                --model "{{ .Values.hermes.model }}" \
-                --litellm-base-url "{{ .Values.litellm.baseUrl }}" \
-                --litellm-api-key "$(cat /etc/litellm-api-key)" \
-                --litellm-model "{{ .Values.litellm.model }}" \
-                {{- if .Values.telegram.enabled }}
+              # certifi's cacert.pem is a dangling symlink to
+              # /etc/openshell-tls/ca-bundle.pem in bare-pod mode (that path is
+              # only created by the NemoClaw-managed entrypoint, which we do
+              # not use). Point hermes + all TLS clients at the merged bundle
+              # and disable hermes's startup ssl_guard (which would otherwise
+              # reject the dangling certifi path).
+              BUNDLE="$HERMES_HOME/ca-bundle.pem"
+              export HERMES_CA_BUNDLE="$BUNDLE"
+              export SSL_CERT_FILE="$BUNDLE"
+              export REQUESTS_CA_BUNDLE="$BUNDLE"
+              export CURL_CA_BUNDLE="$BUNDLE"
+              export HERMES_SKIP_SSL_GUARD=1
+              {{- if .Values.telegram.enabled }}
+              # One-off Telegram channel validation (bounded, non-fatal, BEFORE
+              # the gateway so it doesn't race the gateway's own long-poll):
+              # getMe proves the token + egress, then one test message proves
+              # delivery.
+              node /etc/openclaw-config/telegram-verify.js >> /sandbox/.hermes/telegram-verify.log 2>&1 || true
+              {{- end }}
+              # Web dashboard (separate process, own port; login required via
+              # basic_auth so a 0.0.0.0 bind is allowed).
+              /opt/hermes/.venv/bin/hermes dashboard \
+                --host 0.0.0.0 \
+                --port {{ .Values.hermes.dashboardPort }} \
+                --skip-build --no-open >> /sandbox/.hermes/dashboard.log 2>&1 &
+              # Gateway (foreground; only real flags: --force --accept-hooks;
+              # ports/keys come from $HERMES_HOME/config.yaml + .env).
+              exec /opt/hermes/.venv/bin/hermes gateway run --force --accept-hooks
+          env:                {{- if .Values.telegram.enabled }}
                 --telegram \
                 --telegram-bot-token "$(cat /etc/telegram-bot-token)" \
                 {{- end }}
@@ -136,6 +153,32 @@ spec:
               value: /sandbox
             - name: HERMES_HOME
               value: /sandbox/.hermes
+            {{- if .Values.telegram.enabled }}
+            - name: HERMES_TELEGRAM_ENABLED
+              value: "true"
+            {{- if .Values.telegram.allowAll }}
+            - name: GATEWAY_ALLOW_ALL_USERS
+              value: "true"
+            - name: HERMES_TELEGRAM_DM_POLICY
+              value: "open"
+            - name: HERMES_TELEGRAM_GROUP_POLICY
+              value: "open"
+            {{- else }}
+            - name: HERMES_TELEGRAM_DM_POLICY
+              value: "pairing"
+            - name: HERMES_TELEGRAM_GROUP_POLICY
+              value: "pairing"
+            {{- end }}
+            {{- end }}
+            {{- if .Values.hermes.dashboardAuth.enabled }}
+            - name: HERMES_DASHBOARD_BASIC_AUTH_USERNAME
+              value: {{ .Values.hermes.dashboardAuth.username | quote }}
+            - name: HERMES_DASHBOARD_BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: hermes-dashboard-password
+            {{- end }}
             - name: API_SERVER_KEY
               valueFrom:
                 secretKeyRef:
@@ -166,7 +209,7 @@ spec:
             - name: hermes-api
               containerPort: {{ .Values.hermes.apiPort }}
               protocol: TCP
-            - name: hermes-dashboard
+            - name: hermes-dash
               containerPort: {{ .Values.hermes.dashboardPort }}
               protocol: TCP
           readinessProbe:

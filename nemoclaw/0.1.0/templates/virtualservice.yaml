@@ -21,6 +21,18 @@ spec:
             port:
               number: {{ .Values.service.port }}
     {{- else if eq .Values.agent "hermes" }}
+    # Route OpenAI-compatible API calls (/v1/*) to the API port; everything
+    # else (the web dashboard, /login, /api/auth/*, static assets) to the
+    # dashboard port.
+    - name: hermes-api
+      match:
+        - uri:
+            prefix: /v1/
+      route:
+        - destination:
+            host: {{ include "nemoclaw.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.hermesApiPort }}
     - name: hermes-dashboard
       route:
         - destination:

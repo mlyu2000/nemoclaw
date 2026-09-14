@@ -15,12 +15,15 @@ spec:
       targetPort: {{ .Values.service.targetPort }}
       protocol: TCP
     {{- else if eq .Values.agent "hermes" }}
-    - name: hermes-dashboard
-      port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.hermesDashboardPort }}
-      protocol: TCP
+    # Two named Service ports so the VirtualService can route by path:
+    #   /v1/  -> api  (OpenAI-compatible, hermes.apiPort)
+    #   /     -> dashboard (basic-auth web UI, hermes.dashboardPort)
     - name: hermes-api
       port: {{ .Values.service.hermesApiPort }}
       targetPort: {{ .Values.hermes.apiPort }}
+      protocol: TCP
+    - name: hermes-dashboard
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.hermes.dashboardPort }}
       protocol: TCP
     {{- end }}

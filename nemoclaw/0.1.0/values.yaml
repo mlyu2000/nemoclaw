@@ -48,6 +48,11 @@ ui:
   root: "/sandbox/.openclaw/ui"
 
 domain:
+  # App prefix for the dashboard host. The full host is "<appPrefix>.<base>".
+  # Default "nemoclaw" (backward-compatible). Set to "hermes" (or anything) when
+  # deploying this chart as a SEPARATE framework next to an existing one, so the
+  # VS host + EzAppConfig endpoint don't collide.
+  appPrefix: "nemoclaw"
   base: "<your-pcai-domain>"
   istioGateway: "istio-system/ezaf-gateway"
 
@@ -68,9 +73,15 @@ hermes:
     pullPolicy: IfNotPresent
   apiPort: 8642
   dashboardPort: 18790
-  dashboardInternalPort: 19119
   apiServerKey: "CHANGE_ME-HERMES-API-KEY"
   model: "qwen3-8-27b-int4-dflash2-r2"
+  # Dashboard basic-auth (required: hermes refuses to bind 0.0.0.0 without an
+  # auth provider). Enable by default so the dashboard port is usable; the
+  # password is generated at install unless you pin one here.
+  dashboardAuth:
+    enabled: true
+    username: "admin"
+    password: ""  # empty -> random 24-char password generated at install
   resources:
     requests:
       cpu: 250m
@@ -85,7 +96,6 @@ service:
   port: 80
   targetPort: 18789
   hermesApiPort: 8642
-  hermesDashboardPort: 18790
 
 ingress:
   enabled: true

@@ -98,25 +98,27 @@ data:
 
   {{- else if eq .Values.agent "hermes" }}
   # ── Hermes Agent config (written to /sandbox/.hermes/ at pod start) ─────
-  # seed-hermes-config.sh is sourced by the container entrypoint to write
-  # ~/.hermes/config.yaml + .env before `hermes gateway run`.
+  # seed-hermes-config.sh is run by the container command to write
+  # $HERMES_HOME/config.yaml + .env before `hermes gateway run`.
   #
-  # The real API_SERVER_KEY and Telegram bot token come from env vars (the
-  # Secret). The config.env carries the placeholder structure so the seed
-  # script produces valid config.yaml even without Secrets mounted.
+  # PROVEN against hermes v0.19.0 on CS1 (probe13, 2026-09-14). Key layout
+  # requirements (a wrong shape breaks the agent's OpenAI client):
+  #   * providers.custom MUST carry `name:` + `base_url` + `api_key`.
+  #   * The `api:` key is NOT a hermes field — hermes falls back to it as the
+  #     base URL, producing base_url="openai-completions" and a dead client.
+  #   * api_server port/host come from platforms.api_server.extra.
+  # Secrets (litellm key, api-server key, telegram token) are read from the
+  # mounted Secret files, never stored in this ConfigMap.
   hermes-config.env: |
-    HERMES_MODEL={{ .Values.hermes.model }}
-    HERMES_LITELLM_BASE_URL={{ .Values.litellm.baseUrl }}
-    HERMES_LITELLM_API_KEY={{ .Values.litellm.apiKey }}
     HERMES_LITELLM_MODEL={{ .Values.litellm.model }}
-    HERMES_API_SERVER_KEY={{ .Values.hermes.apiServerKey }}
-    TELEGRAM_BOT_TOKEN={{ .Values.telegram.botToken }}
-    TELEGRAM_ALLOW_ALL={{ .Values.telegram.allowAll | default true }}
-    {{- if .Values.telegram.enabled }}
-    HERMES_TELEGRAM_ENABLED=true
-    {{- end }}
+    HERMES_LITELLM_BASE_URL={{ .Values.litellm.baseUrl }}
 
-  # Seed script: generates ~/.hermes/config.yaml + .env from hermes-config.env.
+  # One-off Telegram channel verification (shared by both agents; runs before
+  # the hermes gateway so it doesn't race the gateway's own long-poll).
+  telegram-verify.js: |-
+{{ .Files.Get "files/telegram-verify.js" | indent 4 }}
+
+  # Seed script: generates $HERMES_HOME/config.yaml + .env + merged CA bundle.
   seed-hermes-config.sh: |
     #!/usr/bin/env bash
     set -euo pipefail
@@ -124,52 +126,69 @@ data:
     mkdir -p "$HERMES_HOME"
     CONFIG="$HERMES_HOME/config.yaml"
     ENV_FILE="$HERMES_HOME/.env"
+    BUNDLE="$HERMES_HOME/ca-bundle.pem"
+
     if [ -f /etc/openclaw-config/hermes-config.env ]; then
       set -a
       . /etc/openclaw-config/hermes-config.env
       set +a
     fi
+
+    # Secrets from the mounted Secret files (subPath mounts of the gateway
+    # token Secret).
+    HERMES_API_SERVER_KEY="$(cat /etc/hermes-api-key)"
+    HERMES_LITELLM_API_KEY="$(cat /etc/litellm-api-key)"
+    HERMES_API_PORT="${HERMES_API_PORT:-8642}"
+    HERMES_TELEGRAM_ENABLED="${HERMES_TELEGRAM_ENABLED:-false}"
+    HERMES_TELEGRAM_DM_POLICY="${HERMES_TELEGRAM_DM_POLICY:-pairing}"
+    HERMES_TELEGRAM_GROUP_POLICY="${HERMES_TELEGRAM_GROUP_POLICY:-pairing}"
+
     cat > "$ENV_FILE" <<ENVEOF
-    API_SERVER_KEY=${HERMES_API_SERVER_KEY}
-    HERMES_HOME=$HERMES_HOME
-    API_SERVER_PORT=18642
-    API_SERVER_HOST=127.0.0.1
+    API_SERVER_PORT=${HERMES_API_PORT}
+    API_SERVER_HOST=0.0.0.0
+    API_SERVER_KEY=***
     ENVEOF
     chmod 600 "$ENV_FILE"
-    cat > "$CONFIG" <<CONFIGEOF
-    config_version: 33
+
+    # Merged CA bundle: system CA + ezua/istio domain CA. The system bundle
+    # has NO trailing newline — always emit one between PEM files or openssl
+    # fails with "PEM routines: bad end line" and every TLS client errors.
+    { cat /etc/ssl/certs/ca-certificates.crt; echo; } > "$BUNDLE"
+    if [ -f /etc/ezua-domain-ca-certs/ezua-domain-ca-cert.crt ]; then
+      { cat /etc/ezua-domain-ca-certs/ezua-domain-ca-cert.crt; echo; } >> "$BUNDLE"
+    fi
+    chmod 644 "$BUNDLE"
+
+    cat > "$CONFIG" <<CFGEOF
+    _config_version: 33
     model:
-      default: ${HERMES_MODEL}
+      default: ${HERMES_LITELLM_MODEL}
       provider: custom
-      base_url: ${HERMES_LITELLM_BASE_URL}
+      base_url: "${HERMES_LITELLM_BASE_URL}"
     providers:
       custom:
+        name: custom
+        base_url: "${HERMES_LITELLM_BASE_URL}"
         api_key: ${HERMES_LITELLM_API_KEY}
-        base_url: ${HERMES_LITELLM_BASE_URL}
-        api: openai-completions
-        models:
-          - id: ${HERMES_LITELLM_MODEL}
-            name: ${HERMES_LITELLM_MODEL}
+        default_model: ${HERMES_LITELLM_MODEL}
+        discover_models: true
     custom_providers:
-      - provider: custom
-        base_url: ${HERMES_LITELLM_BASE_URL}
+      - name: custom
+        provider: custom
+        base_url: "${HERMES_LITELLM_BASE_URL}"
         api_key: ${HERMES_LITELLM_API_KEY}
         discover_models: true
-    _nemoclaw_upstream:
-      provider: custom
-      model: ${HERMES_LITELLM_MODEL}
-    api_server:
-      enabled: true
-      port: 18642
-      host: 127.0.0.1
     platforms:
       api_server:
         enabled: true
+        extra:
+          port: ${HERMES_API_PORT}
+          host: 0.0.0.0
       telegram:
-        enabled: ${HERMES_TELEGRAM_ENABLED:-false}
-    plugins:
-      enabled: [nemoclaw]
-    CONFIGEOF
+        enabled: ${HERMES_TELEGRAM_ENABLED}
+        dm_policy: ${HERMES_TELEGRAM_DM_POLICY}
+        group_policy: ${HERMES_TELEGRAM_GROUP_POLICY}
+    CFGEOF
     chmod 600 "$CONFIG"
     echo "[seed] Wrote $CONFIG and $ENV_FILE"
   {{- end }}
