@@ -27,7 +27,7 @@ data:
         "mode": "merge",
         "providers": {
           "inference": {
-            "baseUrl": {{ .Values.litellm.baseUrl | quote }},
+            "baseUrl": {{ include "nemoclaw.litellmBaseUrl" . | quote }},
             "apiKey": {{ .Values.litellm.apiKey | quote }},
             "api": "openai-completions",
             "models": [
@@ -111,7 +111,7 @@ data:
   # mounted Secret files, never stored in this ConfigMap.
   hermes-config.env: |
     HERMES_LITELLM_MODEL={{ .Values.litellm.model }}
-    HERMES_LITELLM_BASE_URL={{ .Values.litellm.baseUrl }}
+    HERMES_LITELLM_BASE_URL={{ include "nemoclaw.litellmBaseUrl" . }}
 
   # One-off Telegram channel verification (shared by both agents; runs before
   # the hermes gateway so it doesn't race the gateway's own long-poll).

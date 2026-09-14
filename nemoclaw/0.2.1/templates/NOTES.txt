@@ -5,7 +5,7 @@ Dashboard URL:   {{ include "nemoclaw.dashboardUrl" . }}
 {{- if eq .Values.agent "openclaw" }}
 Gateway:         bind={{ .Values.gateway.bind }}, port {{ .Values.gateway.port }}, static token
                  (Secret {{ include "nemoclaw.fullname" . }}-gateway-token)
-LLM:             {{ .Values.litellm.model }} via {{ .Values.litellm.baseUrl }}
+LLM:             {{ .Values.litellm.model }} via {{ include "nemoclaw.litellmBaseUrl" . }}
 {{- else if eq .Values.agent "hermes" }}
 API:             OpenAI-compatible on port {{ .Values.hermes.apiPort }}
 Dashboard:       port {{ .Values.hermes.dashboardPort }} (basic-auth login)
@@ -14,7 +14,7 @@ API Key:         (Secret {{ include "nemoclaw.fullname" . }}-gateway-token, key:
 Dashboard PW:    (Secret {{ include "nemoclaw.fullname" . }}-gateway-token,
                  key: hermes-dashboard-password — `helm get values {{ .Release.Name }} -n {{ .Release.Namespace }} -o yaml`)
 {{- end }}
-LLM:             {{ .Values.litellm.model }} via {{ .Values.litellm.baseUrl }}
+LLM:             {{ .Values.litellm.model }} via {{ include "nemoclaw.litellmBaseUrl" . }}
 {{- end }}
 
 Verify (via the PCAI portal — no kubectl):

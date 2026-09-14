@@ -33,13 +33,16 @@ gateway:
 
 # ── LLM endpoint (PCAI internal LiteLLM) ─────────────────────────────────────
 litellm:
-  baseUrl: "http://litellm-helm.<litellm-namespace>.svc.cluster.local:4000/v1"
+  # Empty -> auto-detect the LiteLLM namespace at install (the ns owning the
+  # "litellm-helm-masterkey" secret) and build "http://litellm-helm.<ns>.svc.cluster.local:4000/v1".
+  baseUrl: ""
   model: "qwen3-8-27b-int4-dflash2-r2"
   contextWindow: 131072
   maxTokens: 8192
   apiKey: "CHANGE_ME-litellm-master-key"
   keyRef:
-    namespace: "<litellm-namespace>"
+    # Empty -> auto-detect the LiteLLM namespace (see litellm.baseUrl above).
+    namespace: ""
     secret: "litellm-helm-masterkey"
     key: "masterkey"
 
@@ -53,7 +56,9 @@ domain:
   # deploying this chart as a SEPARATE framework next to an existing one, so the
   # VS host + EzAppConfig endpoint don't collide.
   appPrefix: "nemoclaw"
-  base: "<your-pcai-domain>"
+  # Empty -> auto-detect the PCAI base domain at install (most common host
+  # suffix across the Istio VirtualServices, e.g. "aie.cs1.ctc.sg.lab").
+  base: ""
   istioGateway: "istio-system/ezaf-gateway"
 
 # ── Telegram (shared by both agents) ─────────────────────────────────────────
@@ -102,12 +107,16 @@ ingress:
 
 ezua:
   virtualService:
-    endpoint: "nemoclaw.<your-pcai-domain>"
+    # Display-only endpoint shown in the portal; empty -> derived from the
+    # VirtualService host (<appPrefix>.<base>) at deploy time (not hard-coded).
+    endpoint: ""
     istioGateway: "istio-system/ezaf-gateway"
 
 persistence:
   enabled: true
-  storageClassName: "<pcai-storageclass>"
+  # Empty -> auto-detect the cluster default StorageClass (annotation
+  # storageclass.kubernetes.io/is-default-class=true).
+  storageClassName: ""
   size: 10Gi
 
 # ── Resources (OpenClaw gateway) ────────────────────────────────────────────

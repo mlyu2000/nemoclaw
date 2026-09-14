@@ -53,20 +53,30 @@ two frameworks are distinguishable in the cluster and the portal.
    "Bring Your Own App" flow).
 2. **Point it at this framework** — upload **`nemoclaw-0.2.1.tgz`** (the
    portal also picks up `logo.png` and `porting.md`).
-3. **Fill in the values** in the portal's values form:
+3. **Fill in the values** in the portal's values form. **Empty fields are
+   auto-detected from the cluster at install time** — you only need to fill in
+   the ones you want to override:
    - **`agent`** — `openclaw` (default, NemoClaw gateway) or `hermes` (Hermes Agent).
-   - **`domain.base`** — your PCAI base domain (e.g. `aie.cs1.ctc.sg.lab`).
-   - **`domain.appPrefix`** — the host prefix; the dashboard host becomes
-     `<appPrefix>.<domain.base>`. Use `hermes` for a Hermes deployment next to
-     an existing `nemoclaw` one so the hosts don't collide.
-   - **`fullnameOverride`** (optional) — e.g. `nemoclaw-hermes` for distinct
+   - **`domain.base`** — *(auto)* the PCAI base domain, detected from the most
+     common host suffix across the Istio VirtualServices (e.g.
+     `aie.cs1.ctc.sg.lab`). Set to override. The dashboard host is
+     `<appPrefix>.<domain.base>`.
+   - **`domain.appPrefix`** — the host prefix (default `nemoclaw`). Use
+     `hermes` for a Hermes deployment next to an existing `nemoclaw` one.
+   - **`fullnameOverride`** *(optional)* — e.g. `nemoclaw-hermes` for distinct
      resource names per agent runtime.
-   - **`litellm.apiKey`** — the LiteLLM master key (paste it, or have the portal
-     fetch it from the `litellm-helm-masterkey` secret in the LiteLLM namespace).
-     The committed value is a `CHANGE_ME` placeholder and is never stored in the repo.
-   - **`litellm.baseUrl`** / **`litellm.model`** — the internal LiteLLM proxy
-     (`qwen3-8-27b-int4-dflash2-r2`).
-   - **`persistence.storageClassName`** — your PCAI storage class.
+   - **`litellm.keyRef.namespace`** — *(auto)* the namespace owning the
+     `litellm-helm-masterkey` secret; falls back to the release namespace. Set
+     explicitly if LiteLLM lives elsewhere.
+   - **`litellm.baseUrl`** — *(auto)* `http://litellm-helm.<ns>.svc.cluster.local:4000/v1`
+     built from the resolved namespace.
+   - **`litellm.apiKey`** — the LiteLLM master key (paste it, or have the
+     portal fetch it from the `litellm-helm-masterkey` secret). The committed
+     value is a `CHANGE_ME` placeholder and is never stored in the repo.
+   - **`litellm.model`** — `qwen3-8-27b-int4-dflash2-r2` (default).
+   - **`persistence.storageClassName`** — *(auto)* the cluster's default
+     StorageClass (annotation `storageclass.kubernetes.io/is-default-class=true`).
+     Set to override.
    - **`telegram.*`** (optional) — `botToken` from @BotFather (one token per
      deployment — two agents must NOT share a token), `testChatId`,
      `allowAll` (default `true`). The real token is entered here, never committed.

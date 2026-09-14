@@ -95,6 +95,23 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
 - **One Telegram bot token per deployment** — Telegram allows a single
   long-poll `getUpdates` per token; two deployments sharing a token collide
   and the losing gateway tears down. Use a distinct bot per agent runtime.
+- **Environment auto-detection (no static placeholders)** — the previously
+  hard-coded `<your-pcai-domain>` / `<pcai-storageclass>` /
+  `<litellm-namespace>` placeholders are gone. Empty values are resolved at
+  install time via Helm `lookup`:
+  - `domain.base` → the most common host suffix across the Istio
+    VirtualServices (each host is `<app>.<base>`).
+  - `persistence.storageClassName` → the StorageClass flagged
+    `storageclass.kubernetes.io/is-default-class=true`.
+  - `litellm.keyRef.namespace` → the namespace owning the
+    `litellm-helm-masterkey` secret (best-effort cross-namespace lookup;
+    falls back to the release namespace). `litellm.baseUrl` is then built as
+    `http://litellm-helm.<ns>.svc.cluster.local:4000/v1`.
+  Any of these can still be overridden by setting the value explicitly. Note
+  `lookup` only returns data during a real `install`/`upgrade` (not
+  `helm template`/`--dry-run`/`--client`), and cluster-wide list lookups are
+  subject to the install RBAC — that's why the litellm-namespace lookup is
+  best-effort with a fallback.
 
 ## Deploy (via the PCAI portal — no kubectl)
 
@@ -102,15 +119,20 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
 2. **Point it at this framework** — upload **`nemoclaw-0.2.1.tgz`** from the
    repo root (the portal also picks up `logo.png` and `porting.md`). It creates
    the `EzAppConfig` and installs the chart.
-3. **Fill in the values** in the portal's values form:
+3. **Fill in the values** in the portal's values form. **Empty fields are
+   auto-detected from the cluster at install time** (Helm `lookup` — populated
+   only during a real install/upgrade) — fill in only what you want to override:
    - **`agent`** — `openclaw` (default) or `hermes`.
-   - `domain.base` (your PCAI base domain) and `domain.appPrefix` (host
-     prefix; use `hermes` for a second deployment so the hosts differ).
-   - `fullnameOverride` (optional; e.g. `nemoclaw-openclaw` / `nemoclaw-hermes`
-     for distinct resource names).
-   - `litellm.apiKey` (the LiteLLM master key), `litellm.baseUrl` /
-     `litellm.model`, `persistence.storageClassName`, and optional `telegram.*`
-     (a **distinct** bot token per deployment).
+   - `domain.base` *(auto: most common VS host suffix)* and `domain.appPrefix`
+     (host prefix; use `hermes` for a second deployment so the hosts differ).
+   - `fullnameOverride` *(optional)* — e.g. `nemoclaw-openclaw` /
+     `nemoclaw-hermes` for distinct resource names.
+   - `litellm.keyRef.namespace` *(auto: the ns owning the
+     `litellm-helm-masterkey` secret, else the release namespace)*; `litellm.baseUrl`
+     *(auto-built from that ns)*; `litellm.apiKey` (the master key);
+     `litellm.model`.
+   - `persistence.storageClassName` *(auto: the cluster default StorageClass)*.
+   - Optional `telegram.*` (a **distinct** bot token per deployment).
    - **`hermes.apiServerKey`** + **`hermes.dashboardAuth.password`** (hermes only).
    - Secrets are entered in the UI and are **never committed**.
 4. **Deploy.** The portal shows install progress and, once done, a **ready**

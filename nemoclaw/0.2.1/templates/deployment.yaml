@@ -187,7 +187,7 @@ spec:
             - name: HERMES_MODEL
               value: {{ .Values.hermes.model | quote }}
             - name: NEMOCLAW_INFERENCE_BASE_URL
-              value: {{ .Values.litellm.baseUrl | quote }}
+              value: {{ include "nemoclaw.litellmBaseUrl" . | quote }}
             - name: NEMOCLAW_MODEL
               value: {{ .Values.litellm.model | quote }}
             - name: NEMOCLAW_INFERENCE_PROVIDER_ID
