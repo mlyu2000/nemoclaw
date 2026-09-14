@@ -50,35 +50,38 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- /*
-  litellmNamespace: namespace holding the LiteLLM proxy + its master-key secret.
+  litellmNamespace: namespace where the LiteLLM proxy runs (used to build the
+  baseUrl). The user supplies the API key directly (litellm.apiKey) — the chart
+  does NOT read it from a secret, so no keyRef is needed.
   Resolution order:
-    1. explicit .Values.litellm.keyRef.namespace (if not a placeholder)
-    2. cluster auto-detect: the namespace that owns the "litellm-helm-masterkey"
-       secret (lookup — only populated during a real install/upgrade)
-    3. fallback .Values.litellm.namespace
-  Returns "" if nothing resolves (renderers should guard on that).
+    1. explicit .Values.litellm.namespace (if not empty/placeholder)
+    2. best-effort cluster auto-detect: the namespace that owns a
+       "litellm-helm" Service / "litellm-helm-masterkey" Secret (lookup —
+       populated only during a real install/upgrade)
+    3. fallback: the release namespace
+  Returns "" if nothing resolves.
 */ -}}
 {{- define "nemoclaw.litellmNamespace" -}}
-{{- /*
-  Resolution order:
-    1. explicit .Values.litellm.keyRef.namespace (if not empty/placeholder)
-    2. best-effort cross-namespace lookup of the "litellm-helm-masterkey"
-       secret (works only when the install RBAC can list secrets cluster-wide;
-       on many PCAI platforms it returns nil)
-    3. fallback: the release namespace (litellm often co-located in the
-       deploying user's namespace)
-  Set keyRef.namespace explicitly for a guaranteed result.
-*/ -}}
-{{- $explicit := .Values.litellm.keyRef.namespace -}}
+{{- $explicit := .Values.litellm.namespace -}}
 {{- if and $explicit (eq (trim (include "nemoclaw.isPlaceholder" (printf "%s" $explicit))) "false") }}
 {{- $explicit -}}
 {{- else -}}
 {{- $detected := "" -}}
+{{- $svcs := lookup "v1" "Service" "" "litellm-helm" -}}
+{{- if $svcs }}
+{{- range $svc := $svcs.items }}
+{{- if and (not $detected) $svc.metadata.namespace }}
+{{- $detected = $svc.metadata.namespace }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if not $detected }}
 {{- $secrets := lookup "v1" "Secret" "" "litellm-helm-masterkey" -}}
 {{- if $secrets }}
-{{- range $s := $secrets.items }}
-{{- if and (not $detected) $s.metadata.namespace }}
-{{- $detected = $s.metadata.namespace }}
+{{- range $sec := $secrets.items }}
+{{- if and (not $detected) $sec.metadata.namespace }}
+{{- $detected = $sec.metadata.namespace }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

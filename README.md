@@ -65,14 +65,16 @@ two frameworks are distinguishable in the cluster and the portal.
      `hermes` for a Hermes deployment next to an existing `nemoclaw` one.
    - **`fullnameOverride`** *(optional)* — e.g. `nemoclaw-hermes` for distinct
      resource names per agent runtime.
-   - **`litellm.keyRef.namespace`** — *(auto)* the namespace owning the
-     `litellm-helm-masterkey` secret; falls back to the release namespace. Set
-     explicitly if LiteLLM lives elsewhere.
+   - **`litellm.namespace`** — *(auto)* the namespace hosting the LiteLLM proxy
+     (detected from the `litellm-helm` Service / master-key secret; falls back
+     to the release namespace). Set explicitly if LiteLLM lives elsewhere.
    - **`litellm.baseUrl`** — *(auto)* `http://litellm-helm.<ns>.svc.cluster.local:4000/v1`
      built from the resolved namespace.
-   - **`litellm.apiKey`** — the LiteLLM master key (paste it, or have the
-     portal fetch it from the `litellm-helm-masterkey` secret). The committed
-     value is a `CHANGE_ME` placeholder and is never stored in the repo.
+   - **`litellm.apiKey`** — **REQUIRED.** Paste the LiteLLM API key here. The
+     chart does **not** read it from any cluster secret — users cannot
+     access/create the LiteLLM secret, so this value is the single source of
+     the key. (Committed value is a `CHANGE_ME` placeholder, never stored in
+     the repo.)
    - **`litellm.model`** — `qwen3-8-27b-int4-dflash2-r2` (default).
    - **`persistence.storageClassName`** — *(auto)* the cluster's default
      StorageClass (annotation `storageclass.kubernetes.io/is-default-class=true`).

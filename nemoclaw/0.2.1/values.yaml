@@ -33,19 +33,21 @@ gateway:
 
 # ── LLM endpoint (PCAI internal LiteLLM) ─────────────────────────────────────
 litellm:
-  # Empty -> auto-detect the LiteLLM namespace at install (the ns owning the
-  # "litellm-helm-masterkey" secret) and build "http://litellm-helm.<ns>.svc.cluster.local:4000/v1".
+  # The LiteLLM proxy namespace. Empty -> auto-detected at install time
+  # (the namespace hosting the "litellm-helm" Service / master-key secret),
+  # falling back to the release namespace. Set explicitly if LiteLLM runs
+  # elsewhere. litellm.baseUrl is auto-built from this namespace.
+  namespace: ""
+  # Empty -> auto-built as "http://litellm-helm.<ns>.svc.cluster.local:4000/v1".
+  # Set explicitly to override (e.g. a non-default service name/port).
   baseUrl: ""
   model: "qwen3-8-27b-int4-dflash2-r2"
   contextWindow: 131072
   maxTokens: 8192
+  # REQUIRED - the user must paste the LiteLLM API key here. The chart does
+  # NOT read it from any cluster secret (users cannot access/create the
+  # LiteLLM secret), so this value is the single source of the key.
   apiKey: "CHANGE_ME-litellm-master-key"
-  keyRef:
-    # Empty -> auto-detect the LiteLLM namespace (see litellm.baseUrl above).
-    namespace: ""
-    secret: "litellm-helm-masterkey"
-    key: "masterkey"
-
 # ── Dashboard UI root (OpenClaw only) ────────────────────────────────────────
 ui:
   root: "/sandbox/.openclaw/ui"

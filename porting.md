@@ -79,10 +79,14 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
   dashboard on port 18790 (same VS host). Dashboard admin basic-auth
   (`hermes.dashboardAuth`, username `admin`) — pin `password` at import for a
   known login, or leave empty for a random generated password.
-- **LiteLLM auth**: the master key is a deploy-time value (`litellm.apiKey`)
-  — pasted in the portal values form or fetched from the
-  `litellm-helm-masterkey` secret. It is **never committed** (the committed
-  `values.yaml` uses a `CHANGE_ME-litellm-master-key` placeholder).
+- **LiteLLM auth**: the API key is a deploy-time value (`litellm.apiKey`)
+  that the **user pastes directly** into the portal values form. The chart
+  does **not** read it from any cluster secret — users cannot access or
+  create the LiteLLM secret, so `litellm.apiKey` is the single source of the
+  key. It is **never committed** (the committed `values.yaml` uses a
+  `CHANGE_ME` placeholder). The `litellm.namespace` is auto-detected (or
+  set explicitly) only to build the `baseUrl`; it is not used to fetch the
+  key.
 - **Istio sidecar**: the agent pod gets a sidecar (namespace
   `istio-injection: enabled`); the sidecar forwards `X-Forwarded-For`.
 - **Memory / probes**: the OpenClaw gateway's V8 heap is capped by the
@@ -103,9 +107,9 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
     VirtualServices (each host is `<app>.<base>`).
   - `persistence.storageClassName` → the StorageClass flagged
     `storageclass.kubernetes.io/is-default-class=true`.
-  - `litellm.keyRef.namespace` → the namespace owning the
-    `litellm-helm-masterkey` secret (best-effort cross-namespace lookup;
-    falls back to the release namespace). `litellm.baseUrl` is then built as
+  - `litellm.namespace` → the namespace hosting the `litellm-helm` Service
+    (best-effort cross-namespace lookup; falls back to the release
+    namespace). `litellm.baseUrl` is then built as
     `http://litellm-helm.<ns>.svc.cluster.local:4000/v1`.
   Any of these can still be overridden by setting the value explicitly. Note
   `lookup` only returns data during a real `install`/`upgrade` (not
@@ -127,10 +131,10 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
      (host prefix; use `hermes` for a second deployment so the hosts differ).
    - `fullnameOverride` *(optional)* — e.g. `nemoclaw-openclaw` /
      `nemoclaw-hermes` for distinct resource names.
-   - `litellm.keyRef.namespace` *(auto: the ns owning the
-     `litellm-helm-masterkey` secret, else the release namespace)*; `litellm.baseUrl`
-     *(auto-built from that ns)*; `litellm.apiKey` (the master key);
-     `litellm.model`.
+   - `litellm.namespace` *(auto: the ns hosting the `litellm-helm` Service,
+     else the release namespace)*; `litellm.baseUrl` *(auto-built from that
+     ns)*; **`litellm.apiKey` (required — paste the LiteLLM API key; the chart
+     does not read it from any cluster secret)**; `litellm.model`.
    - `persistence.storageClassName` *(auto: the cluster default StorageClass)*.
    - Optional `telegram.*` (a **distinct** bot token per deployment).
    - **`hermes.apiServerKey`** + **`hermes.dashboardAuth.password`** (hermes only).
