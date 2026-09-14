@@ -138,6 +138,12 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
    - `persistence.storageClassName` *(auto: the cluster default StorageClass)*.
    - Optional `telegram.*` (a **distinct** bot token per deployment).
    - **`hermes.apiServerKey`** + **`hermes.dashboardAuth.password`** (hermes only).
+   - **`ezua.virtualService.endpoint`** — **required for the Open button.** Set
+     it to `<domain.appPrefix>.<domain.base>` (e.g.
+     `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab`). The PCAI portal reads this
+     value **verbatim** to build the app's external endpoint; if it's empty the
+     app shows **no Open button**. The VirtualService is auto-created for this
+     same host.
    - Secrets are entered in the UI and are **never committed**.
 4. **Deploy.** The portal shows install progress and, once done, a **ready**
    health state plus the dashboard URL and "Open" button.

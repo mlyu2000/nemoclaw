@@ -61,8 +61,15 @@ two frameworks are distinguishable in the cluster and the portal.
      common host suffix across the Istio VirtualServices (e.g.
      `aie.cs1.ctc.sg.lab`). Set to override. The dashboard host is
      `<appPrefix>.<domain.base>`.
-   - **`domain.appPrefix`** — the host prefix (default `nemoclaw`). Use
-     `hermes` for a Hermes deployment next to an existing `nemoclaw` one.
+   - **`domain.appPrefix`** — the host prefix (default `nemoclaw`). Set this to
+     the app/release name (e.g. `nemoclaw-openclaw-test`) so the host is unique.
+     Use `hermes` for a Hermes deployment next to an existing `nemoclaw` one.
+   - **`ezua.virtualService.endpoint`** — **REQUIRED for the Open button.** The
+     external dashboard host, e.g. `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab`.
+     The PCAI portal reads this value **verbatim** to build the app's external
+     endpoint (the "Open" button). If it's empty the app shows **no Open button**.
+     Set it to `<domain.appPrefix>.<domain.base>` (the VirtualService is created
+     for this same host automatically).
    - **`fullnameOverride`** *(optional)* — e.g. `nemoclaw-hermes` for distinct
      resource names per agent runtime.
    - **`litellm.namespace`** — *(auto)* the namespace hosting the LiteLLM proxy
@@ -148,6 +155,12 @@ works on any PCAI platform / domain.
    test message** to your chat; after that it replies to DMs / group messages.
    A pairing code means `telegram.allowAll` is `false` — set it to `true` and
    re-deploy. Note: a bot cannot message first — send `/start` to it once.
+
+> **No "Open" button?** The portal builds the Open-button endpoint from the
+> **`ezua.virtualService.endpoint`** value (read verbatim). If it was left
+> empty at import, set it to `<domain.appPrefix>.<domain.base>`
+> (e.g. `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab`) and re-apply — the app's
+> external endpoint (and the Open button) then appear.
 
 > No `kubectl` is needed at any point — the portal's Applications page gives
 > you app status, the "Open" button, and a Logs view for the gateway.

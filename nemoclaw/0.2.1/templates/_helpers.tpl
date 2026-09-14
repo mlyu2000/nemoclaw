@@ -186,7 +186,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "nemoclaw.domain" -}}
-{{ .Values.domain.appPrefix | default "nemoclaw" }}.{{ include "nemoclaw.baseDomain" . }}
+{{ .Values.domain.appPrefix | default .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
 {{- end }}
 
 {{- define "nemoclaw.dashboardUrl" -}}

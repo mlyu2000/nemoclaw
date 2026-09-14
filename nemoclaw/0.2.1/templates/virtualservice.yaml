@@ -9,7 +9,14 @@ metadata:
     hpe-ezua/created-by: ezua
 spec:
   hosts:
-    - {{ include "nemoclaw.domain" . }}
+    {{- $host := .Values.ezua.virtualService.endpoint }}
+    {{- if $host }}
+    {{- $host = trim $host }}
+    {{- if hasPrefix "https://" $host }}{{- $host = trimPrefix "https://" $host }}
+    {{- else if hasPrefix "http://" $host }}{{- $host = trimPrefix "http://" $host }}
+    {{- end }}
+    {{- end }}
+    - {{ if $host }}{{ $host }}{{ else }}{{ include "nemoclaw.domain" . }}{{ end }}
   gateways:
     - {{ .Values.domain.istioGateway }}
   http:

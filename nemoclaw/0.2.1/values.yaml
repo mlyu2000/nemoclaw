@@ -54,9 +54,10 @@ ui:
 
 domain:
   # App prefix for the dashboard host. The full host is "<appPrefix>.<base>".
-  # Default "nemoclaw" (backward-compatible). Set to "hermes" (or anything) when
-  # deploying this chart as a SEPARATE framework next to an existing one, so the
-  # VS host + EzAppConfig endpoint don't collide.
+  # Set this to the app/release name (e.g. "nemoclaw-openclaw-test") so the
+  # VirtualService host is unique. MUST match the prefix you put in
+  # ezua.virtualService.endpoint (see below) — that endpoint drives the portal
+  # "Open" button.
   appPrefix: "nemoclaw"
   # Empty -> auto-detect the PCAI base domain at install (most common host
   # suffix across the Istio VirtualServices, e.g. "aie.cs1.ctc.sg.lab").
@@ -109,8 +110,11 @@ ingress:
 
 ezua:
   virtualService:
-    # Display-only endpoint shown in the portal; empty -> derived from the
-    # VirtualService host (<appPrefix>.<base>) at deploy time (not hard-coded).
+    # REQUIRED (for the Open button) — the external dashboard host, e.g.
+    # "nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab". The PCAI portal reads this
+    # value VERBATIM to build the app's external endpoint (the "Open" button);
+    # an empty value => no Open button. Format: "<domain.appPrefix>.<domain.base>"
+    # (the same host the VirtualService is created for). Fill it in at import.
     endpoint: ""
     istioGateway: "istio-system/ezaf-gateway"
 
