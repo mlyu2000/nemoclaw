@@ -1,0 +1,16 @@
+apiVersion: v2
+name: nemoclaw
+description: >-
+  NemoClaw (OpenClaw) agent gateway with a static dashboard URL and a static
+  gateway token, backed by the PCAI internal LiteLLM proxy (qwen3-8-27b-int4-dflash2).
+  Headless, non-interactive, device-auth disabled for all-device pairing.
+type: application
+version: 0.2.1
+appVersion: "2026.3.11"
+keywords:
+  - nemoclaw
+  - openclaw
+  - gateway
+  - agent
+maintainers:
+  - name: mlyu2000

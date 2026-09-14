@@ -81,7 +81,7 @@ spec:
           livenessProbe:
             tcpSocket:
               port: {{ .Values.gateway.port }}
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 5
@@ -236,7 +236,7 @@ spec:
                   CODE=$(curl -so /dev/null -w '%{http_code}' --max-time 2 \
                     "http://127.0.0.1:{{ .Values.hermes.apiPort }}/health" 2>/dev/null || echo 000)
                   [ "$CODE" = "200" ] || [ "$CODE" = "401" ] || exit 1
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 5
