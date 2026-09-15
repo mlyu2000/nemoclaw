@@ -31,7 +31,7 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
 - **Per-runtime resource names** — `fullnameOverride` (e.g. `nemoclaw-openclaw`
   / `nemoclaw-hermes`) gives each agent runtime its own deployment/service/secret/
   PVC/VirtualService names so two side-by-side deployments are distinguishable
-  in the cluster and the portal. `domain.appPrefix` gives each its own VS host.
+  in the cluster and the portal. `fullnameOverride` gives each its own VS host.
 - **OpenClaw path** (`agent: openclaw`): static dashboard URL + static gateway
   token baked at import time (no post-deploy curl/scrape). The token is generated
   by the PCAI portal or entered in the values form.
@@ -65,8 +65,8 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
   `agent: hermes`. Exactly one agent container per pod. The chart renders
   different ConfigMaps, Secrets, Services, and VirtualServices per agent.
 - **Domain / gateway**: exposed on the `ezaf-gateway` Istio gateway. The base
-  domain (`domain.base`) and host prefix (`domain.appPrefix`) are deploy-time
-  variables, so the dashboard host `<appPrefix>.<domain.base>` is fully dynamic
+  domain is handled via `ezua.virtualService.endpoint` (platform placeholders).
+  The base domain and host prefix are deploy-time variables, so the dashboard host is fully dynamic
   and not tied to any single PCAI platform.
 - **Distinct framework names** — the EzAppConfig `label` (what the portal shows
   as the framework/app name) is per-agent: `NemoClaw (OpenClaw)` vs
@@ -103,8 +103,6 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
   hard-coded `<your-pcai-domain>` / `<pcai-storageclass>` /
   `<litellm-namespace>` placeholders are gone. Empty values are resolved at
   install time via Helm `lookup`:
-  - `domain.base` → the most common host suffix across the Istio
-    VirtualServices (each host is `<app>.<base>`).
   - `persistence.storageClassName` → the StorageClass flagged
     `storageclass.kubernetes.io/is-default-class=true`.
   - `litellm.namespace` → the namespace hosting the `litellm-helm` Service
@@ -127,8 +125,7 @@ A single-gateway sandbox app exposed on the PCAI Istio `ezaf-gateway` as
    auto-detected from the cluster at install time** (Helm `lookup` — populated
    only during a real install/upgrade) — fill in only what you want to override:
    - **`agent`** — `openclaw` (default) or `hermes`.
-   - `domain.base` *(auto: most common VS host suffix)* and `domain.appPrefix`
-     (host prefix; use `hermes` for a second deployment so the hosts differ).
+   - `ezua.virtualService.endpoint` *(default: `${RELEASE_NAME}.${DOMAIN_NAME}` — platform placeholders)* for the external host.
    - `fullnameOverride` *(optional)* — e.g. `nemoclaw-openclaw` /
      `nemoclaw-hermes` for distinct resource names.
    - `litellm.namespace` *(auto: the ns hosting the `litellm-helm` Service,
@@ -156,7 +153,7 @@ The import is idempotent — re-running it re-applies the values and re-deploys.
 
 1. **App health** — PCAI portal → **Applications** → the app → status
    **ready**. Open the app's **Logs** tab for the agent logs.
-2. **Dashboard** — click **"Open"** (or `https://<appPrefix>.<domain.base>`).
+2. **Dashboard** — click **"Open"** (or the URL shown in the portal).
    - OpenClaw: **Health OK** + working **Chat** section.
    - Hermes: web dashboard with model routing + chat (admin login `admin` +
      the pinned password).

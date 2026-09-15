@@ -52,26 +52,6 @@ litellm:
 ui:
   root: "/sandbox/.openclaw/ui"
 
-domain:
-  # ── ONE input drives the host. You normally only set ONE of these: ──────────
-  #   (a) ezua.virtualService.endpoint  — the full external host, e.g.
-  #       "nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab".  <-- PREFERRED / simplest
-  #   (b) domain.appPrefix + domain.base — the host is then built as
-  #       "<appPrefix>.<base>".
-  #
-  # If (a) is set it wins: the VirtualService host AND the dashboard URL are
-  # derived from it, so you never have to keep (a) and (b) in sync.
-  #
-  # Prefix for the dashboard host. Ignored when ezua.virtualService.endpoint is
-  # set. Defaults to the release name (so the host is unique per app) if left
-  # empty.
-  appPrefix: "nemoclaw"
-  # Base domain, e.g. "aie.cs1.ctc.sg.lab". Ignored when
-  # ezua.virtualService.endpoint is set. Empty -> auto-detected at install
-  # (most common host suffix across the Istio VirtualServices).
-  base: ""
-  istioGateway: "istio-system/ezaf-gateway"
-
 # ── Telegram (shared by both agents) ─────────────────────────────────────────
 telegram:
   enabled: true

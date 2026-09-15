@@ -115,18 +115,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- /*
   baseDomain: the PCAI base domain (e.g. aie.cs1.ctc.sg.lab).
   Resolution order:
-    1. explicit .Values.domain.base (if not a placeholder)
+    1. Extracted from .Values.ezua.virtualService.endpoint if it's a literal host
+       (not a ${...} placeholder) — strip the first label to get the suffix
     2. cluster auto-detect: the most common host suffix across the Istio
-       VirtualServices (each host is "<app>.<base>"; strip the first label and
-       take the majority). Only populated during a real install/upgrade.
+       VirtualServices (each host is "<app>.<base>"); strip the first label and
+       take the majority. Only populated during a real install/upgrade.
   Returns "" if nothing resolves.
 */ -}}
 {{- define "nemoclaw.baseDomain" -}}
-{{- $explicit := .Values.domain.base -}}
-{{- if and $explicit (eq (trim (include "nemoclaw.isPlaceholder" (printf "%s" $explicit))) "false") }}
-{{- $explicit -}}
-{{- else -}}
-{{- $suffixCount := dict -}}
+{{- $ep := include "nemoclaw.endpointHost" . }}
+{{- if and $ep (not (contains "${" $ep)) }}
+{{- /* literal host: derive baseDomain by stripping the first label */ -}}
+{{- $labels := splitList "." $ep }}
+{{- if gt (len $labels) 1 }}
+{{- join "." (slice $labels 1 (len $labels)) }}
+{{- end }}
+{{- else }}
+{{- $suffixCount := dict }}
 {{- $vss := lookup "networking.istio.io/v1beta1" "VirtualService" "" "" -}}
 {{- if $vss }}
 {{- range $vs := $vss.items }}
@@ -196,29 +201,22 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "nemoclaw.domain" -}}
-{{- $h := include "nemoclaw.endpointHost" . -}}
+{{- $h := include "nemoclaw.endpointHost" . }}
 {{- if $h -}}
 {{- if contains "${" $h -}}
 {{- /*
-   The endpoint is a PCAI *platform* placeholder (e.g. ${RELEASE_NAME}.${DOMAIN_NAME}).
-   The portal substitutes it at import time, but Helm cannot — so the VS host is
-   computed HERE to exactly what the platform will render:
-     ${RELEASE_NAME} -> the helm release name
-     ${DOMAIN_NAME}  -> the PCAI base domain (aie.<site>.lab)
-   This keeps the ingress host and the portal "Open" button in agreement.
+   Platform placeholder (e.g. ${RELEASE_NAME}.${DOMAIN_NAME}).
+   Pass through verbatim — the PCAI portal substitutes both the endpoint
+   (for the Open button) and the VS host at import time.
 */ -}}
-{{- if contains "${RELEASE_NAME}" $h -}}
-{{ .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
+{{ $h }}
 {{- else -}}
-{{ .Values.domain.appPrefix | default .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
-{{- end -}}
-{{- else -}}
-{{- /* a literal host: use it as-is (already scheme-stripped) */ -}}
+{{- /* literal host: use as-is (scheme already stripped) */ -}}
 {{ $h }}
 {{- end -}}
 {{- else -}}
-{{- /* no endpoint set: fall back to appPrefix (default release) + base domain */ -}}
-{{ .Values.domain.appPrefix | default .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
+{{- /* no endpoint set: fall back to release name + base domain */ -}}
+{{- printf "%s.%s" .Release.Name (include "nemoclaw.baseDomain" .) }}
 {{- end -}}
 {{- end }}
 

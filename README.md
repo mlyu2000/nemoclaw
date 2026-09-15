@@ -7,8 +7,7 @@ an Istio `VirtualService`. The LLM is the PCAI-internal LiteLLM proxy.
 **Pick ONE agent** via `agent:` in values.yaml — `openclaw` (default, backward-compatible)
 or `hermes`. Exactly one agent container runs per pod. For two side-by-side deployments
 (one per agent), use a **different bot token per agent** (Telegram allows only one
-long-poll `getUpdates` per token) and a different `domain.appPrefix` /
-`fullnameOverride` per deployment so the hosts and resource names don't collide.
+long-poll `getUpdates` per token) and a different `fullnameOverride` per deployment so the hosts and resource names don't collide.
 
 Everything in this repo is managed **through the PCAI web UI**. You import the app and verify it in the portal.
 
@@ -45,7 +44,7 @@ two frameworks are distinguishable in the cluster and the portal.
 | PVC `nemoclaw-agent-state`   | Agent state (10Gi, shared sub-paths per agent)      |
 | Service `nemoclaw`               | ClusterIP — port 80→18789 (OC) or 80→18790+8642 (Hermes) |
 | Deployment `nemoclaw`               | Single agent container (istio sidecar)              |
-| VirtualService `nemoclaw-vs`            | `https://<appPrefix>.<domain.base>` (default prefix `nemoclaw`) |
+|| VirtualService `nemoclaw-vs`            | `https://<ezua.virtualService.endpoint>` (auto from `${RELEASE_NAME}.${DOMAIN_NAME}` by default) |
 
 ## Deploy (via the PCAI portal — no kubectl)
 
@@ -57,19 +56,12 @@ two frameworks are distinguishable in the cluster and the portal.
    auto-detected from the cluster at install time** — you only need to fill in
    the ones you want to override:
    - **`agent`** — `openclaw` (default, NemoClaw gateway) or `hermes` (Hermes Agent).
-   - **`domain.base`** — *(auto)* the PCAI base domain, detected from the most
-     common host suffix across the Istio VirtualServices (e.g.
-     `aie.cs1.ctc.sg.lab`). Set to override. The dashboard host is
-     `<appPrefix>.<domain.base>`.
-   - **`domain.appPrefix`** — the host prefix (default `nemoclaw`). Set this to
-     the app/release name (e.g. `nemoclaw-openclaw-test`) so the host is unique.
-     Use `hermes` for a Hermes deployment next to an existing `nemoclaw` one.
    - **`ezua.virtualService.endpoint`** — **REQUIRED for the Open button.**
      Defaults to **`${RELEASE_NAME}.${DOMAIN_NAME}`** (a PCAI *platform
      placeholder*) — a zero-edit import works on any deployment: the portal
      substitutes `${RELEASE_NAME}` → the helm release name and `${DOMAIN_NAME}`
-     → the base domain at import. The chart computes the VirtualService host to
-     the same rendered value, so the ingress and the "Open" button always agree.
+     → the base domain at import. The chart passes this placeholder through to
+     the VirtualService host so the ingress and the "Open" button always agree.
      To pin a specific host, override with a **literal** full host, e.g.
      `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab` (the portal reads a literal
      verbatim — do NOT use `{{ .Values }}` Helm expressions here; only the
@@ -103,8 +95,8 @@ two frameworks are distinguishable in the cluster and the portal.
 
 The import is idempotent — re-running it re-applies the current values and
 re-deploys. Secrets are supplied in the UI and are **never committed** to the repo.
-`domain.base` / `domain.appPrefix` are deploy-time values, so the same chart
-works on any PCAI platform / domain.
+`ezua.virtualService.endpoint` is deploy-time agnostic, so the same chart
+works on any PCAI platform / environment.
 
 ## Key values
 
@@ -112,7 +104,7 @@ works on any PCAI platform / domain.
 
 - `agent: openclaw` (default) or `agent: hermes`
 - `fullnameOverride` (optional) — distinct resource names per runtime
-- `domain.appPrefix` + `domain.base` — dashboard host `<appPrefix>.<base>`
+- `ezua.virtualService.endpoint` — dashboard host (defaults to `${RELEASE_NAME}.${DOMAIN_NAME}`)
 - `litellm.baseUrl` = `http://litellm-helm.<litellm-namespace>.svc.cluster.local:4000/v1`
 - `litellm.model` = `qwen3-8-27b-int4-dflash2-r2`
 - `telegram.enabled` / `telegram.botToken` — optional Telegram channel; on
@@ -151,7 +143,7 @@ works on any PCAI platform / domain.
 
 1. **App health** — PCAI portal → **Applications** → the app. The status
    should read **ready**.
-2. **Dashboard** — click the **"Open"** button (or `https://<appPrefix>.<domain.base>`).
+2. **Dashboard** — click the **"Open"** button (or the URL shown in the portal).
    - OpenClaw: **Health OK** + working **Chat** section
    - Hermes: web dashboard with model routing + chat (admin login: `admin` +
      the password you pinned)
