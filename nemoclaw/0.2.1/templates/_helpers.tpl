@@ -94,22 +94,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- /*
-  litellmBaseUrl: the internal LiteLLM OpenAI-compatible endpoint.
-  Resolution order:
-    1. explicit .Values.litellm.baseUrl (if not a placeholder)
-    2. auto-constructed from the resolved litellm namespace
-  Returns "" if neither resolves.
+  litellmBaseUrl: the user-specified LLM endpoint.
+  Simple passthrough — no auto-detection, no fallback.
 */ -}}
 {{- define "nemoclaw.litellmBaseUrl" -}}
-{{- $explicit := .Values.litellm.baseUrl -}}
-{{- if and $explicit (eq (trim (include "nemoclaw.isPlaceholder" (printf "%s" $explicit))) "false") }}
-{{- $explicit -}}
-{{- else -}}
-{{- $ns := include "nemoclaw.litellmNamespace" . -}}
-{{- if $ns -}}
-{{- printf "http://litellm-helm.%s.svc.cluster.local:4000/v1" $ns -}}
-{{- end -}}
-{{- end -}}
+{{- .Values.litellm.baseUrl }}
 {{- end }}
 
 {{- /*

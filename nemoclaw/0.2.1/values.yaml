@@ -31,24 +31,18 @@ gateway:
   dangerouslyDisableDeviceAuth: true
   allowedOrigins: "*"
 
-# ── LLM endpoint (PCAI internal LiteLLM, or any OpenAI-compatible API) ────────
+# ── LLM endpoint (OpenAI-compatible API) ─────────────────────────────────────
 #
-# Two modes of operation:
-#   1. Litellm proxy (default): leave baseUrl empty, chart auto-detects the
-#      litellm-helm service in the cluster and routes LLM calls through it.
-#      Requires litellm.apiKey (the master key).
-#   2. Direct LLM endpoint: set litellm.baseUrl to the full URL of your model
-#      server (e.g. https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1).
-#      The chart uses this URL directly without involving litellm.
+# SINGLE INPUT — specify one:
+#   litellm.baseUrl: the full URL of your LLM endpoint.
+#     - For litellm proxy: "http://litellm-helm.<ns>.svc.cluster.local:4000/v1"
+#     - For direct model:  "https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1"
+#   That's it — no auto-detection, no fallback.
 litellm:
-  # The LiteLLM proxy namespace. Empty -> auto-detected at install time
-  # (the namespace hosting the "litellm-helm" Service / master-key secret),
-  # falling back to the release namespace. Set explicitly if LiteLLM runs
-  # elsewhere. litellm.baseUrl is auto-built from this namespace.
-  namespace: ""
-  # Empty -> auto-detect litellm service in cluster.
-  # Set to a full URL to bypass litellm and call the LLM endpoint directly,
-  # e.g.: "https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1"
+  # REQUIRED — the full URL of your OpenAI-compatible LLM endpoint.
+  # Examples:
+  #   litellm proxy:    "http://litellm-helm.project-user-aieadmin.svc.cluster.local:4000/v1"
+  #   direct endpoint:  "https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1"
   baseUrl: ""
   model: "qwen3-8-27b-int4-dflash2-r2"
   contextWindow: 131072

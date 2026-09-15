@@ -46,18 +46,28 @@ two frameworks are distinguishable in the cluster and the portal.
 | Deployment `nemoclaw`               | Single agent container (istio sidecar)              |
 | VirtualService `nemoclaw-vs`            | `https://<ezua.virtualService.endpoint>` (auto from `${RELEASE_NAME}.${DOMAIN_NAME}` by default) |
 
-## LLM Modes
+## LLM Endpoint
 
-The chart supports **two LLM modes** — pick one:
+The chart has **one single input** for the LLM endpoint — `litellm.baseUrl`.
+No auto-detection, no fallback, no assumptions.
 
-1. **Litellm proxy (default)** — Leave `litellm.baseUrl` empty. The chart auto-detects the `litellm-helm` service in the cluster and routes LLM calls through it. Requires `litellm.apiKey` (the master key).
+Set it to your OpenAI-compatible API endpoint:
 
-2. **Direct LLM endpoint** — Set `litellm.baseUrl` to the full URL of your model server, e.g.:
-   ```yaml
-   litellm:
-     baseUrl: "https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1"
-   ```
-   The chart uses this URL directly without involving litellm.
+```yaml
+# Litellm proxy mode:
+litellm:
+  baseUrl: "http://litellm-helm.project-user-aieadmin.svc.cluster.local:4000/v1"
+  apiKey: "<your-litellm-master-key>"
+
+# Direct model endpoint:
+litellm:
+  baseUrl: "https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1"
+  apiKey: "<model-api-key-or-empty>"
+```
+
+If you're using the litellm proxy, also set `litellm.apiKey` (the master key).
+For direct endpoints that require auth, set `litellm.apiKey` accordingly.
+For unauthenticated endpoints, leave it empty.
 
 ## Deploy (via the PCAI portal — no kubectl)
 
@@ -81,15 +91,12 @@ The chart supports **two LLM modes** — pick one:
      `${...}` platform placeholders are substituted).
    - **`fullnameOverride`** *(optional)* — e.g. `nemoclaw-hermes` for distinct
      resource names per agent runtime.
-   - **`litellm.namespace`** — *(auto)* the namespace hosting the LiteLLM proxy
-     (detected from the `litellm-helm` Service / master-key secret; falls back
-     to the release namespace). Set explicitly if LiteLLM lives elsewhere.
-   - **`litellm.baseUrl`** — Leave empty for **litellm proxy mode** (auto-detect `litellm-helm` service in cluster). Set to a full URL (e.g. `https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1`) for **direct LLM mode** (bypass litellm entirely).
-   - **`litellm.apiKey`** — **REQUIRED.** Paste the LiteLLM API key here. The
-     chart does **not** read it from any cluster secret — users cannot
-     access/create the LiteLLM secret, so this value is the single source of
-     the key. (Committed value is a `CHANGE_ME` placeholder, never stored in
-     the repo.)
+   - **`litellm.baseUrl`** — **REQUIRED.** The full URL of your OpenAI-compatible LLM endpoint. No auto-detection.
+     Examples:
+     - litellm proxy: `http://litellm-helm.project-user-aieadmin.svc.cluster.local:4000/v1`
+     - direct model: `https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1`
+   - **`litellm.apiKey`** — Required when the endpoint needs auth. For litellm proxy, use the master key.
+     For direct endpoints, use the model's API key (or leave empty if unauthenticated).
    - **`litellm.model`** — `qwen3-8-27b-int4-dflash2-r2` (default).
    - **`persistence.storageClassName`** — *(auto)* the cluster's default
      StorageClass (annotation `storageclass.kubernetes.io/is-default-class=true`).
