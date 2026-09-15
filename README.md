@@ -44,7 +44,20 @@ two frameworks are distinguishable in the cluster and the portal.
 | PVC `nemoclaw-agent-state`   | Agent state (10Gi, shared sub-paths per agent)      |
 | Service `nemoclaw`               | ClusterIP — port 80→18789 (OC) or 80→18790+8642 (Hermes) |
 | Deployment `nemoclaw`               | Single agent container (istio sidecar)              |
-|| VirtualService `nemoclaw-vs`            | `https://<ezua.virtualService.endpoint>` (auto from `${RELEASE_NAME}.${DOMAIN_NAME}` by default) |
+| VirtualService `nemoclaw-vs`            | `https://<ezua.virtualService.endpoint>` (auto from `${RELEASE_NAME}.${DOMAIN_NAME}` by default) |
+
+## LLM Modes
+
+The chart supports **two LLM modes** — pick one:
+
+1. **Litellm proxy (default)** — Leave `litellm.baseUrl` empty. The chart auto-detects the `litellm-helm` service in the cluster and routes LLM calls through it. Requires `litellm.apiKey` (the master key).
+
+2. **Direct LLM endpoint** — Set `litellm.baseUrl` to the full URL of your model server, e.g.:
+   ```yaml
+   litellm:
+     baseUrl: "https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1"
+   ```
+   The chart uses this URL directly without involving litellm.
 
 ## Deploy (via the PCAI portal — no kubectl)
 
@@ -71,8 +84,7 @@ two frameworks are distinguishable in the cluster and the portal.
    - **`litellm.namespace`** — *(auto)* the namespace hosting the LiteLLM proxy
      (detected from the `litellm-helm` Service / master-key secret; falls back
      to the release namespace). Set explicitly if LiteLLM lives elsewhere.
-   - **`litellm.baseUrl`** — *(auto)* `http://litellm-helm.<ns>.svc.cluster.local:4000/v1`
-     built from the resolved namespace.
+   - **`litellm.baseUrl`** — Leave empty for **litellm proxy mode** (auto-detect `litellm-helm` service in cluster). Set to a full URL (e.g. `https://llama-3-1-8b-instruct.project-user-aieadmin.serving.aie.cs1.ctc.sg.lab/v1`) for **direct LLM mode** (bypass litellm entirely).
    - **`litellm.apiKey`** — **REQUIRED.** Paste the LiteLLM API key here. The
      chart does **not** read it from any cluster secret — users cannot
      access/create the LiteLLM secret, so this value is the single source of
