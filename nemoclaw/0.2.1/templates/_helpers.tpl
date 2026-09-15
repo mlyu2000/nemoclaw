@@ -185,8 +185,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end }}
 
+{{- define "nemoclaw.endpointHost" -}}
+{{- $h := .Values.ezua.virtualService.endpoint | default "" | trim -}}
+{{- if hasPrefix "https://" $h -}}
+{{- $h = trimPrefix "https://" $h -}}
+{{- else if hasPrefix "http://" $h -}}
+{{- $h = trimPrefix "http://" $h -}}
+{{- end -}}
+{{- $h | trim -}}
+{{- end }}
+
 {{- define "nemoclaw.domain" -}}
+{{- $h := include "nemoclaw.endpointHost" . -}}
+{{- if $h -}}
+{{ $h }}
+{{- else -}}
 {{ .Values.domain.appPrefix | default .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
+{{- end -}}
 {{- end }}
 
 {{- define "nemoclaw.dashboardUrl" -}}

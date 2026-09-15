@@ -53,14 +53,22 @@ ui:
   root: "/sandbox/.openclaw/ui"
 
 domain:
-  # App prefix for the dashboard host. The full host is "<appPrefix>.<base>".
-  # Set this to the app/release name (e.g. "nemoclaw-openclaw-test") so the
-  # VirtualService host is unique. MUST match the prefix you put in
-  # ezua.virtualService.endpoint (see below) — that endpoint drives the portal
-  # "Open" button.
+  # ── ONE input drives the host. You normally only set ONE of these: ──────────
+  #   (a) ezua.virtualService.endpoint  — the full external host, e.g.
+  #       "nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab".  <-- PREFERRED / simplest
+  #   (b) domain.appPrefix + domain.base — the host is then built as
+  #       "<appPrefix>.<base>".
+  #
+  # If (a) is set it wins: the VirtualService host AND the dashboard URL are
+  # derived from it, so you never have to keep (a) and (b) in sync.
+  #
+  # Prefix for the dashboard host. Ignored when ezua.virtualService.endpoint is
+  # set. Defaults to the release name (so the host is unique per app) if left
+  # empty.
   appPrefix: "nemoclaw"
-  # Empty -> auto-detect the PCAI base domain at install (most common host
-  # suffix across the Istio VirtualServices, e.g. "aie.cs1.ctc.sg.lab").
+  # Base domain, e.g. "aie.cs1.ctc.sg.lab". Ignored when
+  # ezua.virtualService.endpoint is set. Empty -> auto-detected at install
+  # (most common host suffix across the Istio VirtualServices).
   base: ""
   istioGateway: "istio-system/ezaf-gateway"
 
@@ -110,11 +118,18 @@ ingress:
 
 ezua:
   virtualService:
-    # REQUIRED (for the Open button) — the external dashboard host, e.g.
-    # "nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab". The PCAI portal reads this
-    # value VERBATIM to build the app's external endpoint (the "Open" button);
-    # an empty value => no Open button. Format: "<domain.appPrefix>.<domain.base>"
-    # (the same host the VirtualService is created for). Fill it in at import.
+    # THE single input for the external host. Paste the full dashboard host here,
+    # e.g. "nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab".
+    #
+    # The PCAI portal reads this value VERBATIM (it is NOT Helm-templated) to
+    # build the app's external endpoint (the "Open" button) — an empty value
+    # means no Open button. The chart ALSO derives the VirtualService host and
+    # the dashboard URL from this same value, so the rest of the chart
+    # (domain.appPrefix / domain.base) is optional and does not need to match.
+    #
+    # Note: the platform does not Helm-render this field, so it must be a
+    # literal host (a "{{ .Values... }}" expression would be shown verbatim and
+    # break the Open button).
     endpoint: ""
     istioGateway: "istio-system/ezaf-gateway"
 
