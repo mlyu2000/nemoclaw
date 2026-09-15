@@ -64,12 +64,16 @@ two frameworks are distinguishable in the cluster and the portal.
    - **`domain.appPrefix`** — the host prefix (default `nemoclaw`). Set this to
      the app/release name (e.g. `nemoclaw-openclaw-test`) so the host is unique.
      Use `hermes` for a Hermes deployment next to an existing `nemoclaw` one.
-   - **`ezua.virtualService.endpoint`** — **REQUIRED for the Open button.** The
-     external dashboard host, e.g. `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab`.
-     The PCAI portal reads this value **verbatim** to build the app's external
-     endpoint (the "Open" button). If it's empty the app shows **no Open button**.
-     Set it to `<domain.appPrefix>.<domain.base>` (the VirtualService is created
-     for this same host automatically).
+   - **`ezua.virtualService.endpoint`** — **REQUIRED for the Open button.**
+     Defaults to **`${RELEASE_NAME}.${DOMAIN_NAME}`** (a PCAI *platform
+     placeholder*) — a zero-edit import works on any deployment: the portal
+     substitutes `${RELEASE_NAME}` → the helm release name and `${DOMAIN_NAME}`
+     → the base domain at import. The chart computes the VirtualService host to
+     the same rendered value, so the ingress and the "Open" button always agree.
+     To pin a specific host, override with a **literal** full host, e.g.
+     `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab` (the portal reads a literal
+     verbatim — do NOT use `{{ .Values }}` Helm expressions here; only the
+     `${...}` platform placeholders are substituted).
    - **`fullnameOverride`** *(optional)* — e.g. `nemoclaw-hermes` for distinct
      resource names per agent runtime.
    - **`litellm.namespace`** — *(auto)* the namespace hosting the LiteLLM proxy
@@ -157,10 +161,11 @@ works on any PCAI platform / domain.
    re-deploy. Note: a bot cannot message first — send `/start` to it once.
 
 > **No "Open" button?** The portal builds the Open-button endpoint from the
-> **`ezua.virtualService.endpoint`** value (read verbatim). If it was left
-> empty at import, set it to `<domain.appPrefix>.<domain.base>`
-> (e.g. `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab`) and re-apply — the app's
-> external endpoint (and the Open button) then appear.
+> **`ezua.virtualService.endpoint`** value. The chart default
+> (`${RELEASE_NAME}.${DOMAIN_NAME}`) should populate it automatically — if it's
+> empty, set it to that placeholder (or a literal full host such as
+> `nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab`) and re-apply; the app's external
+> endpoint (and the Open button) then appear.
 
 > No `kubectl` is needed at any point — the portal's Applications page gives
 > you app status, the "Open" button, and a Logs view for the gateway.

@@ -118,19 +118,23 @@ ingress:
 
 ezua:
   virtualService:
-    # THE single input for the external host. Paste the full dashboard host here,
-    # e.g. "nemoclaw-openclaw-test.aie.cs1.ctc.sg.lab".
+    # THE single input for the external host. Default is a PCAI *platform
+    # placeholder* so a zero-edit import works on any deployment:
     #
-    # The PCAI portal reads this value VERBATIM (it is NOT Helm-templated) to
-    # build the app's external endpoint (the "Open" button) — an empty value
-    # means no Open button. The chart ALSO derives the VirtualService host and
-    # the dashboard URL from this same value, so the rest of the chart
-    # (domain.appPrefix / domain.base) is optional and does not need to match.
+    #   endpoint: "${RELEASE_NAME}.${DOMAIN_NAME}"
     #
-    # Note: the platform does not Helm-render this field, so it must be a
-    # literal host (a "{{ .Values... }}" expression would be shown verbatim and
-    # break the Open button).
-    endpoint: ""
+    # The portal substitutes at import: ${RELEASE_NAME} -> the helm release name,
+    # ${DOMAIN_NAME} -> the PCAI base domain (e.g. aie.<site>.lab). The chart
+    # computes the VirtualService host to the same rendered value, so the ingress
+    # and the portal "Open" button always agree — no static host to type.
+    #
+    # Override with a literal host if you prefer, e.g.
+    #   endpoint: "nemoclaw.aie.cs1.ctc.sg.lab"
+    # (the platform reads this VERBATIM — it is NOT Helm-templated — so a literal
+    # must be a full host; a "{{ .Values }}" expression would be shown verbatim
+    # and break the Open button). The platform placeholders ${...} are different
+    # and ARE substituted.
+    endpoint: "${RELEASE_NAME}.${DOMAIN_NAME}"
     istioGateway: "istio-system/ezaf-gateway"
 
 persistence:

@@ -198,8 +198,26 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "nemoclaw.domain" -}}
 {{- $h := include "nemoclaw.endpointHost" . -}}
 {{- if $h -}}
-{{ $h }}
+{{- if contains "${" $h -}}
+{{- /*
+   The endpoint is a PCAI *platform* placeholder (e.g. ${RELEASE_NAME}.${DOMAIN_NAME}).
+   The portal substitutes it at import time, but Helm cannot — so the VS host is
+   computed HERE to exactly what the platform will render:
+     ${RELEASE_NAME} -> the helm release name
+     ${DOMAIN_NAME}  -> the PCAI base domain (aie.<site>.lab)
+   This keeps the ingress host and the portal "Open" button in agreement.
+*/ -}}
+{{- if contains "${RELEASE_NAME}" $h -}}
+{{ .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
 {{- else -}}
+{{ .Values.domain.appPrefix | default .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
+{{- end -}}
+{{- else -}}
+{{- /* a literal host: use it as-is (already scheme-stripped) */ -}}
+{{ $h }}
+{{- end -}}
+{{- else -}}
+{{- /* no endpoint set: fall back to appPrefix (default release) + base domain */ -}}
 {{ .Values.domain.appPrefix | default .Release.Name }}.{{ include "nemoclaw.baseDomain" . }}
 {{- end -}}
 {{- end }}
