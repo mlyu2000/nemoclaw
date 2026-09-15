@@ -16,9 +16,9 @@ Everything in this repo is managed **through the PCAI web UI**. You import the a
 ```
 logo.png                       Logo shown in the PCAI portal (NVIDIA symbol)
 porting.md                     How NemoClaw was ported to PCAI
-nemoclaw-0.2.3.tgz             Helm package of the chart (root level; top-level dir = nemoclaw)
+nemoclaw-0.2.4.tgz             Helm package of the chart (root level; top-level dir = nemoclaw)
 nemoclaw/
-├── 0.2.3/                     Version folder — the current Helm chart (v0.2.3)
+├── 0.2.4/                     Version folder — the current Helm chart (v0.2.4)
 │   ├── Chart.yaml
 │   ├── values.yaml            agent: openclaw|hermes (default: openclaw)
 │   ├── files/patch-ui.js        Boot-time UI patcher (OpenClaw only)
@@ -27,8 +27,8 @@ nemoclaw/
 └── 0.1.0/                     Previous chart version (kept for history)
 ```
 
-The importable artifact is **`nemoclaw-0.2.3.tgz` at the repo root**. Rebuild it after
-changing the chart with `helm package nemoclaw/0.2.3 -d .`.
+The importable artifact is **`nemoclaw-0.2.4.tgz` at the repo root**. Rebuild it after
+changing the chart with `helm package nemoclaw/0.2.4 -d .`.
 
 ## What gets deployed
 
@@ -78,7 +78,7 @@ ezua domain CA, so those endpoints are trusted out of the box — no extra confi
 
 1. **Open the PCAI portal → Applications → Import / Deploy** (the BYOA /
    "Bring Your Own App" flow).
-2. **Point it at this framework** — upload **`nemoclaw-0.2.3.tgz`** (the
+2. **Point it at this framework** — upload **`nemoclaw-0.2.4.tgz`** (the
    portal also picks up `logo.png` and `porting.md`).
 3. **Fill in the values** in the portal's values form. **Empty fields are
    auto-detected from the cluster at install time** — you only need to fill in
