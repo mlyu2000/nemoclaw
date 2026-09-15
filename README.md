@@ -16,9 +16,9 @@ Everything in this repo is managed **through the PCAI web UI**. You import the a
 ```
 logo.png                       Logo shown in the PCAI portal (NVIDIA symbol)
 porting.md                     How NemoClaw was ported to PCAI
-nemoclaw-0.2.1.tgz             Helm package of the chart (root level; top-level dir = nemoclaw)
+nemoclaw-0.2.3.tgz             Helm package of the chart (root level; top-level dir = nemoclaw)
 nemoclaw/
-├── 0.2.1/                     Version folder — the current Helm chart (v0.2.1)
+├── 0.2.3/                     Version folder — the current Helm chart (v0.2.3)
 │   ├── Chart.yaml
 │   ├── values.yaml            agent: openclaw|hermes (default: openclaw)
 │   ├── files/patch-ui.js        Boot-time UI patcher (OpenClaw only)
@@ -27,8 +27,8 @@ nemoclaw/
 └── 0.1.0/                     Previous chart version (kept for history)
 ```
 
-The importable artifact is **`nemoclaw-0.2.1.tgz` at the repo root**. Rebuild it after
-changing the chart with `helm package nemoclaw/0.2.1 -d .`.
+The importable artifact is **`nemoclaw-0.2.3.tgz` at the repo root**. Rebuild it after
+changing the chart with `helm package nemoclaw/0.2.3 -d .`.
 
 ## What gets deployed
 
@@ -69,11 +69,16 @@ If you're using the litellm proxy, also set `litellm.apiKey` (the master key).
 For direct endpoints that require auth, set `litellm.apiKey` accordingly.
 For unauthenticated endpoints, leave it empty.
 
+**TLS (handled automatically):** for direct `*.serving.*` internal endpoints, the
+OpenClaw Node gateway does not trust the PCAI CA by default (its TLS stack ignores
+`SSL_CERT_FILE`). The chart sets `NODE_EXTRA_CA_CERTS` to the platform-mounted
+ezua domain CA, so those endpoints are trusted out of the box — no extra config.
+
 ## Deploy (via the PCAI portal — no kubectl)
 
 1. **Open the PCAI portal → Applications → Import / Deploy** (the BYOA /
    "Bring Your Own App" flow).
-2. **Point it at this framework** — upload **`nemoclaw-0.2.1.tgz`** (the
+2. **Point it at this framework** — upload **`nemoclaw-0.2.3.tgz`** (the
    portal also picks up `logo.png` and `porting.md`).
 3. **Fill in the values** in the portal's values form. **Empty fields are
    auto-detected from the cluster at install time** — you only need to fill in
