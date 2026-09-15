@@ -16,9 +16,9 @@ Everything in this repo is managed **through the PCAI web UI**. You import the a
 ```
 logo.png                       Logo shown in the PCAI portal (NVIDIA symbol)
 porting.md                     How NemoClaw was ported to PCAI
-nemoclaw-0.2.4.tgz             Helm package of the chart (root level; top-level dir = nemoclaw)
+nemoclaw-0.2.5.tgz             Helm package of the chart (root level; top-level dir = nemoclaw)
 nemoclaw/
-├── 0.2.4/                     Version folder — the current Helm chart (v0.2.4)
+├── 0.2.5/                     Version folder — the current Helm chart (v0.2.5)
 │   ├── Chart.yaml
 │   ├── values.yaml            agent: openclaw|hermes (default: openclaw)
 │   ├── files/patch-ui.js        Boot-time UI patcher (OpenClaw only)
@@ -27,24 +27,25 @@ nemoclaw/
 └── 0.1.0/                     Previous chart version (kept for history)
 ```
 
-The importable artifact is **`nemoclaw-0.2.4.tgz` at the repo root**. Rebuild it after
-changing the chart with `helm package nemoclaw/0.2.4 -d .`.
+The importable artifact is **`nemoclaw-0.2.5.tgz` at the repo root**. Rebuild it after
+changing the chart with `helm package nemoclaw/0.2.5 -d .`.
 
 ## What gets deployed
 
 Resource names follow `<fullnameOverride>-…`. By default `fullnameOverride` is empty and
-resources are named `nemoclaw-…` (backward-compatible). For parallel per-agent
-deployments, set `fullnameOverride: nemoclaw-openclaw` / `nemoclaw-hermes` so the
-two frameworks are distinguishable in the cluster and the portal.
+resources are named **after the release name** (e.g. `nemoclaw-hermes-test-gateway-token`).
+This means **side-by-side imports of the same chart (openclaw + hermes) in one namespace
+do not collide** — each release owns its own secret / configmap / PVC / deployment / VS.
+Override `fullnameOverride` if you want custom resource names.
 
 | Resource (default names) | Purpose                                             |
 |--------------------------|-----------------------------------------------------|
-| Secret `nemoclaw-gateway-token` | Static gateway token + (hermes) API key, dashboard password, litellm key, Telegram |
-| ConfigMap `nemoclaw-openclaw-config` | Seeded agent config (openclaw.json OR hermes config) |
-| PVC `nemoclaw-agent-state`   | Agent state (10Gi, shared sub-paths per agent)      |
-| Service `nemoclaw`               | ClusterIP — port 80→18789 (OC) or 80→18790+8642 (Hermes) |
-| Deployment `nemoclaw`               | Single agent container (istio sidecar)              |
-| VirtualService `nemoclaw-vs`            | `https://<ezua.virtualService.endpoint>` (auto from `${RELEASE_NAME}.${DOMAIN_NAME}` by default) |
+| Secret `<release>-gateway-token` | Static gateway token + (hermes) API key, dashboard password, litellm key, Telegram |
+| ConfigMap `<release>-openclaw-config` | Seeded agent config (openclaw.json OR hermes config) |
+| PVC `<release>-agent-state`   | Agent state (10Gi, shared sub-paths per agent)      |
+| Service `<release>`               | ClusterIP — port 80→18789 (OC) or 80→18790+8642 (Hermes) |
+| Deployment `<release>`               | Single agent container (istio sidecar)              |
+| VirtualService `<release>-vs`            | `https://<ezua.virtualService.endpoint>` (auto from `${RELEASE_NAME}.${DOMAIN_NAME}` by default) |
 
 ## LLM Endpoint
 
@@ -78,7 +79,7 @@ ezua domain CA, so those endpoints are trusted out of the box — no extra confi
 
 1. **Open the PCAI portal → Applications → Import / Deploy** (the BYOA /
    "Bring Your Own App" flow).
-2. **Point it at this framework** — upload **`nemoclaw-0.2.4.tgz`** (the
+2. **Point it at this framework** — upload **`nemoclaw-0.2.5.tgz`** (the
    portal also picks up `logo.png` and `porting.md`).
 3. **Fill in the values** in the portal's values form. **Empty fields are
    auto-detected from the cluster at install time** — you only need to fill in
