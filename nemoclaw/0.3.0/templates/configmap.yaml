@@ -1,0 +1,207 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nemoclaw.fullname" . }}-openclaw-config
+  labels:
+    {{- include "nemoclaw.labels" . | nindent 4 }}
+data:
+  {{- if eq .Values.agent "openclaw" }}
+  # ── OpenClaw base config (openclaw.json) ──────────────────────────────────
+  # NemoClaw governance applied here (docs/security/openclaw-controls.mdx):
+  #  * tools.sandbox.tools.deny — the COMPLETE deny list (replace semantics,
+  #    verified live: a configured deny list REPLACES the built-in one). The
+  #    "allow" key is omitted so the default working allow set is kept.
+  #  * tools.elevated.enabled — pinned off (governance.elevatedEnabled)
+  #  * telegram — allowlist (telegram.allowedChatIds), never dmPolicy "open"
+  #  * gateway.controlUi.allowedOrigins — pinned, never "*"
+  #  * update.checkOnStart — off (no unattended self-update from the sandbox)
+  #
+  # The LiteLLM API key is NOT stored here: it is injected at boot by
+  # seed-openclaw-config.js from the mounted Secret (NemoClaw
+  # credential-storage standard). The "__LITELLM_KEY__" placeholder is
+  # replaced in the JSON string before the config is written to disk.
+  openclaw.json: |-
+    {
+      "wizard": {
+        "lastRunAt": "2026-09-03T00:00:00Z",
+        "lastRunVersion": "2026.3.11",
+        "lastRunCommand": "onboard",
+        "lastRunMode": "local"
+      },
+      "agents": {
+        "defaults": {
+          "model": { "primary": "inference/{{ .Values.litellm.model }}", "fallbacks": [] },
+          "skipBootstrap": true,
+          "thinkingDefault": "off",
+          "workspace": "/sandbox/.openclaw/workspace"
+        }
+      },
+      "models": {
+        "mode": "merge",
+        "providers": {
+          "inference": {
+            "baseUrl": {{ include "nemoclaw.litellmBaseUrl" . | quote }},
+            "apiKey": "__LITELLM_KEY__",
+            "api": "openai-completions",
+            "models": [
+              {
+                "id": {{ .Values.litellm.model | quote }},
+                "name": "inference/{{ .Values.litellm.model }}",
+                "reasoning": false,
+                "input": ["text"],
+                "contextWindow": {{ .Values.litellm.contextWindow }},
+                "maxTokens": {{ .Values.litellm.maxTokens }}
+              }
+            ]
+          }
+        }
+      },
+      "tools": {
+        "sandbox": {
+          "tools": {
+            "deny": [{{ range $i, $t := .Values.governance.toolsDeny }}{{ if $i }}, {{ end }}{{ $t | quote }}{{ end }}]
+          }
+        },
+        "elevated": {
+          "enabled": {{ .Values.governance.elevatedEnabled }}
+        }
+      },
+      "channels": {
+        "defaults": {}{{- if .Values.telegram.enabled }}
+        ,
+        "telegram": {
+          "enabled": true,
+          "dmPolicy": "allowlist",
+          "groupPolicy": "allowlist",
+          "allowFrom": [{{ range $i, $id := .Values.telegram.allowedChatIds }}{{ if $i }}, {{ end }}{{ $id | quote }}{{ end }}],
+          "accounts": {
+            "default": {
+              "botToken": {{ .Values.telegram.botToken | quote }},
+              "dmPolicy": "allowlist",
+              "groupPolicy": "allowlist",
+              "allowFrom": [{{ range $i, $id := .Values.telegram.allowedChatIds }}{{ if $i }}, {{ end }}{{ $id | quote }}{{ end }}]
+            }
+          }
+        }{{- end }}
+      },
+      "update": { "checkOnStart": false },
+      "gateway": {
+        "mode": "local",
+        "bind": "{{ .Values.gateway.bind }}",
+        "port": {{ .Values.gateway.port }},
+        "controlUi": {
+          "allowInsecureAuth": true,
+          "dangerouslyDisableDeviceAuth": {{ .Values.gateway.dangerouslyDisableDeviceAuth }},
+          "allowedOrigins": [{{ .Values.gateway.allowedOrigins | quote }}],
+          "root": "{{ .Values.ui.root }}"
+        },
+        "auth": { "token": {{ .Values.gateway.token | quote }} }
+      }
+    }
+
+  # Boot-time config seeder: reads the base openclaw.json from this ConfigMap,
+  # replaces the __LITELLM_KEY__ placeholder with the key read from the
+  # mounted Secret, validates the JSON, and writes it to stdout (the container
+  # command redirects it to /sandbox/.openclaw/openclaw.json).
+  seed-openclaw-config.js: |
+    const fs = require('fs');
+    const key = process.argv[2];
+    if (!key) { console.error('usage: seed-openclaw-config.js <litellm-api-key>'); process.exit(1); }
+    let cfg = fs.readFileSync('/etc/openclaw-config/openclaw.json', 'utf8');
+    if (!cfg.includes('__LITELLM_KEY__')) {
+      console.error('base config missing __LITELLM_KEY__ placeholder'); process.exit(1);
+    }
+    cfg = cfg.replace('"__LITELLM_KEY__"', JSON.stringify(key));
+    // Validate before writing so a malformed config fails fast at boot.
+    JSON.parse(cfg);
+    process.stdout.write(cfg + '\n');
+
+  # Boot-time UI patcher (unchanged from 0.2.x): same-origin auto-token.js so
+  # the dashboard connects from the bare published URL.
+  patch-ui.js: |
+{{ .Files.Get "files/patch-ui.js" | indent 4 }}
+
+  {{- if .Values.telegram.enabled }}
+  # One-off Telegram channel verification (runs once per pod start, BEFORE the
+  # gateway). Under the allowlist, getMe still proves token + egress; the test
+  # message only reaches telegram.testChatId if set (must be in the allowlist).
+  telegram-verify.js: |
+{{ .Files.Get "files/telegram-verify.js" | indent 4 }}
+  {{- end }}
+
+  {{- else if eq .Values.agent "hermes" }}
+  # ── Hermes Agent config (unchanged from 0.2.x) ────────────────────────────
+  hermes-config.env: |
+    HERMES_LITELLM_MODEL={{ .Values.litellm.model }}
+    HERMES_LITELLM_BASE_URL={{ include "nemoclaw.litellmBaseUrl" . }}
+
+  telegram-verify.js: |
+{{ .Files.Get "files/telegram-verify.js" | indent 4 }}
+
+  seed-hermes-config.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+    HERMES_HOME="${HERMES_HOME:-/sandbox/.hermes}"
+    mkdir -p "$HERMES_HOME"
+    CONFIG="$HERMES_HOME/config.yaml"
+    ENV_FILE="$HERMES_HOME/.env"
+    BUNDLE="$HERMES_HOME/ca-bundle.pem"
+
+    if [ -f /etc/openclaw-config/hermes-config.env ]; then
+      set -a
+      . /etc/openclaw-config/hermes-config.env
+      set +a
+    fi
+
+    HERMES_API_SERVER_KEY="$(cat /etc/hermes-api-key)"
+    HERMES_LITELLM_API_KEY="$(cat /etc/litellm-api-key)"
+    HERMES_API_PORT="${HERMES_API_PORT:-8642}"
+    HERMES_TELEGRAM_ENABLED="${HERMES_TELEGRAM_ENABLED:-false}"
+    HERMES_TELEGRAM_DM_POLICY="${HERMES_TELEGRAM_DM_POLICY:-pairing}"
+    HERMES_TELEGRAM_GROUP_POLICY="${HERMES_TELEGRAM_GROUP_POLICY:-pairing}"
+
+    cat > "$ENV_FILE" <<ENVEOF
+    API_SERVER_PORT=${HERMES_API_PORT}
+    API_SERVER_HOST=0.0.0.0
+    ENVEOF
+    chmod 600 "$ENV_FILE"
+
+    { cat /etc/ssl/certs/ca-certificates.crt; echo; } > "$BUNDLE"
+    if [ -f /etc/ezua-domain-ca-certs/ezua-domain-ca-cert.crt ]; then
+      { cat /etc/ezua-domain-ca-certs/ezua-domain-ca-cert.crt; echo; } >> "$BUNDLE"
+    fi
+    chmod 644 "$BUNDLE"
+
+    cat > "$CONFIG" <<CFGEOF
+    _config_version: 33
+    model:
+      default: ${HERMES_LITELLM_MODEL}
+      provider: custom
+      base_url: "${HERMES_LITELLM_BASE_URL}"
+    providers:
+      custom:
+        name: custom
+        base_url: "${HERMES_LITELLM_BASE_URL}"
+        api_key: $(cat /etc/litellm-api-key)
+        default_model: ${HERMES_LITELLM_MODEL}
+        discover_models: true
+    custom_providers:
+      - name: custom
+        provider: custom
+        base_url: "${HERMES_LITELLM_BASE_URL}"
+        api_key: $(cat /etc/litellm-api-key)
+        discover_models: true
+    platforms:
+      api_server:
+        enabled: true
+        extra:
+          port: ${HERMES_API_PORT}
+          host: 0.0.0.0
+      telegram:
+        enabled: ${HERMES_TELEGRAM_ENABLED}
+        dm_policy: ${HERMES_TELEGRAM_DM_POLICY}
+        group_policy: ${HERMES_TELEGRAM_GROUP_POLICY}
+    CFGEOF
+    chmod 600 "$CONFIG"
+    echo "[seed] Wrote $CONFIG and $ENV_FILE"
+  {{- end }}

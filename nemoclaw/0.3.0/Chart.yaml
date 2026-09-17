@@ -1,0 +1,22 @@
+apiVersion: v2
+name: nemoclaw
+description: >-
+  NemoClaw (OpenClaw) agent gateway on PCAI enforcing the NemoClaw security
+  standards that are achievable without the OpenShell operator:
+  deny-by-default egress (NetworkPolicy), locked Telegram channel
+  (allowlist), tool-level governance, hardened securityContext
+  (readOnlyRootFilesystem, drop ALL caps, no-new-privileges, nproc/nofile
+  ulimits), image digest pinning, static token auth.
+  A single litellm.baseUrl input points at either the LiteLLM proxy or a
+  direct OpenAI-compatible LLM endpoint. Optional Telegram channel.
+type: application
+version: 0.3.0
+appVersion: "2026.3.11"
+keywords:
+  - nemoclaw
+  - openclaw
+  - gateway
+  - agent
+  - security
+maintainers:
+  - name: mlyu2000

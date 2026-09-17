@@ -1,0 +1,341 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nemoclaw.fullname" . }}
+  labels:
+    {{- include "nemoclaw.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nemoclaw.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw.selectorLabels" . | nindent 8 }}
+        {{- if not .Values.istioInjection }}
+        sidecar.istio.io/inject: "false"
+        {{- end }}
+      annotations:
+        {{- if .Values.istioInjection }}
+        # NemoClaw network layer (verified live): the k8s NetworkPolicy alone
+        # does NOT restrict the agent's egress, because the Istio sidecar
+        # captures outbound traffic and, by default (outboundTrafficPolicy=ANY),
+        # proxies it to ANY external IP. REGISTRY_ONLY makes the sidecar enforce
+        # an allowlist: only in-registry (Service) destinations are reachable;
+        # external HTTP/HTTPS to arbitrary hosts times out. This is the real
+        # deny-by-default egress control on CS1 (L7, sidecar-enforced).
+        traffic.sidecar.istio.io/outboundTrafficPolicy: "{ \"mode\": \"REGISTRY_ONLY\" }"
+        {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 998
+        runAsGroup: 998
+        fsGroup: 998
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if eq .Values.agent "openclaw" }}
+      containers:
+        - name: nemoclaw
+          image: {{ include "nemoclaw.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # ── NemoClaw process-layer hardening ──────────────────────────────
+          # (docs/security/process-controls.mdx + deployment/sandbox-hardening.mdx)
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            noNewPrivileges: true
+            runAsNonRoot: true
+            runAsUser: 998
+            runAsGroup: 998
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          ulimits:
+            - name: nproc
+              soft: {{ .Values.governance.nprocLimit }}
+              hard: {{ .Values.governance.nprocLimit }}
+            - name: nofile
+              soft: {{ .Values.governance.nofileLimit }}
+              hard: {{ .Values.governance.nofileLimit }}
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              # NemoClaw process limits (best-effort; the container-runtime
+              # ulimit above takes precedence when lower).
+              ulimit -u {{ .Values.governance.nprocLimit }} 2>/dev/null || true
+              ulimit -n {{ .Values.governance.nofileLimit }} 2>/dev/null || true
+              STATE=/sandbox/.openclaw
+              mkdir -p "$STATE/agents/main/agent" "$STATE/workspace"
+              # Build openclaw.json at boot: base config from the ConfigMap +
+              # the LiteLLM key injected from the mounted Secret, so the key
+              # never lands in the ConfigMap (NemoClaw credential-storage
+              # standard: secrets live outside the mutable config tree).
+              LITELLM_KEY="$(cat /etc/litellm-api-key)"
+              node /etc/openclaw-config/seed-openclaw-config.js "$LITELLM_KEY" > "$STATE/openclaw.json"
+              chmod 600 "$STATE/openclaw.json"
+              # Serve the control UI from a writable path (RO rootfs).
+              UI=/usr/lib/node_modules/openclaw/dist/control-ui
+              mkdir -p "{{ .Values.ui.root }}"
+              cp -r "$UI/." "{{ .Values.ui.root }}/"
+              node /etc/openclaw-config/patch-ui.js "{{ .Values.ui.root }}" "$(cat /etc/gateway-token)"
+              {{- if .Values.telegram.enabled }}
+              node /etc/openclaw-config/telegram-verify.js >> /sandbox/.openclaw/telegram-verify.log 2>&1 || true
+              {{- end }}
+              exec openclaw gateway run \
+                   --bind {{ .Values.gateway.bind }} \
+                   --port {{ .Values.gateway.port }} \
+                   --token "$(cat /etc/gateway-token)"
+          env:
+            - name: HOME
+              value: /sandbox
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: token
+            # NemoClaw credential-discovery boundary (best-practices.mdx):
+            # OpenClaw probes the EC2 IMDS (169.254.169.254) for credentials;
+            # NemoClaw forces this off for every OpenClaw process.
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+            # OpenClaw's Node TLS stack (undici) ignores SSL_CERT_FILE and only
+            # honors NODE_EXTRA_CA_CERTS. Point at the platform-mounted ezua
+            # domain CA so direct LLM endpoints are trusted.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/ezua-domain-ca-certs/ezua-domain-ca-cert.crt
+            {{- if .Values.telegram.enabled }}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: telegram-bot-token
+            {{- with .Values.telegram.testChatId }}
+            - name: TELEGRAM_TEST_CHAT_ID
+              value: {{ . | quote }}
+            {{- end }}
+            - name: TELEGRAM_TEST_MESSAGE
+              value: {{ .Values.telegram.testMessage | quote }}
+            {{- end }}
+          ports:
+            - name: dashboard
+              containerPort: {{ .Values.gateway.port }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.gateway.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.gateway.port }}
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: openclaw-config
+              mountPath: /etc/openclaw-config
+              readOnly: true
+            - name: gateway-token
+              mountPath: /etc/gateway-token
+              subPath: token
+              readOnly: true
+            - name: litellm-api-key
+              mountPath: /etc/litellm-api-key
+              subPath: litellm-api-key
+              readOnly: true
+            - name: agent-state
+              mountPath: /sandbox
+            - name: tmp
+              mountPath: /tmp
+      {{- else if eq .Values.agent "hermes" }}
+      containers:
+        - name: hermes
+          image: {{ include "hermes.image" . }}
+          imagePullPolicy: {{ .Values.hermes.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 998
+            runAsGroup: 998
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              HERMES_HOME=/sandbox/.hermes
+              mkdir -p "$HERMES_HOME"
+              bash /etc/openclaw-config/seed-hermes-config.sh
+              BUNDLE="$HERMES_HOME/ca-bundle.pem"
+              export HERMES_CA_BUNDLE="$BUNDLE"
+              export SSL_CERT_FILE="$BUNDLE"
+              export REQUESTS_CA_BUNDLE="$BUNDLE"
+              export CURL_CA_BUNDLE="$BUNDLE"
+              export HERMES_SKIP_SSL_GUARD=1
+              {{- if .Values.telegram.enabled }}
+              node /etc/openclaw-config/telegram-verify.js >> /sandbox/.hermes/telegram-verify.log 2>&1 || true
+              {{- end }}
+              /opt/hermes/.venv/bin/hermes dashboard \
+                --host 0.0.0.0 \
+                --port {{ .Values.hermes.dashboardPort }} \
+                --skip-build --no-open >> /sandbox/.hermes/dashboard.log 2>&1 &
+              exec /opt/hermes/.venv/bin/hermes gateway run --force --accept-hooks \
+                {{- if .Values.telegram.enabled }} \
+                --telegram \
+                --telegram-bot-token "$(cat /etc/telegram-bot-token)" \
+                {{- end }}
+          env:
+            - name: HOME
+              value: /sandbox
+            - name: HERMES_HOME
+              value: /sandbox/.hermes
+            {{- if .Values.telegram.enabled }}
+            - name: HERMES_TELEGRAM_ENABLED
+              value: "true"
+            {{- if .Values.telegram.allowAll }}
+            - name: GATEWAY_ALLOW_ALL_USERS
+              value: "true"
+            - name: HERMES_TELEGRAM_DM_POLICY
+              value: "open"
+            - name: HERMES_TELEGRAM_GROUP_POLICY
+              value: "open"
+            {{- else }}
+            - name: HERMES_TELEGRAM_DM_POLICY
+              value: "pairing"
+            - name: HERMES_TELEGRAM_GROUP_POLICY
+              value: "pairing"
+            {{- end }}
+            {{- end }}
+            {{- if .Values.hermes.dashboardAuth.enabled }}
+            - name: HERMES_DASHBOARD_BASIC_AUTH_USERNAME
+              value: {{ .Values.hermes.dashboardAuth.username | quote }}
+            - name: HERMES_DASHBOARD_BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: hermes-dashboard-password
+            {{- end }}
+            - name: API_SERVER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: hermes-api-key
+            - name: HERMES_MODEL
+              value: {{ .Values.hermes.model | quote }}
+            - name: NEMOCLAW_INFERENCE_BASE_URL
+              value: {{ include "nemoclaw.litellmBaseUrl" . | quote }}
+            - name: NEMOCLAW_MODEL
+              value: {{ .Values.litellm.model | quote }}
+            - name: NEMOCLAW_INFERENCE_PROVIDER_ID
+              value: "custom"
+            {{- if .Values.telegram.enabled }}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nemoclaw.fullname" . }}-gateway-token
+                  key: telegram-bot-token
+            {{- with .Values.telegram.testChatId }}
+            - name: TELEGRAM_TEST_CHAT_ID
+              value: {{ . | quote }}
+            {{- end }}
+            - name: TELEGRAM_TEST_MESSAGE
+              value: {{ .Values.telegram.testMessage | quote }}
+            {{- end }}
+          ports:
+            - name: hermes-api
+              containerPort: {{ .Values.hermes.apiPort }}
+              protocol: TCP
+            - name: hermes-dash
+              containerPort: {{ .Values.hermes.dashboardPort }}
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - |
+                  set -euo pipefail
+                  CODE=$(curl -so /dev/null -w '%{http_code}' --max-time 2 \
+                    "http://127.0.0.1:{{ .Values.hermes.apiPort }}/health" 2>/dev/null || echo 000)
+                  [ "$CODE" = "200" ] || [ "$CODE" = "401" ] || exit 1
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - |
+                  set -euo pipefail
+                  CODE=$(curl -so /dev/null -w '%{http_code}' --max-time 2 \
+                    "http://127.0.0.1:{{ .Values.hermes.apiPort }}/health" 2>/dev/null || echo 000)
+                  [ "$CODE" = "200" ] || [ "$CODE" = "401" ] || exit 1
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.hermes.resources | nindent 12 }}
+          volumeMounts:
+            - name: openclaw-config
+              mountPath: /etc/openclaw-config
+              readOnly: true
+            - name: gateway-token
+              mountPath: /etc/hermes-api-key
+              subPath: hermes-api-key
+              readOnly: true
+            - name: litellm-api-key
+              mountPath: /etc/litellm-api-key
+              subPath: litellm-api-key
+              readOnly: true
+            - name: gateway-token
+              mountPath: /etc/telegram-bot-token
+              subPath: telegram-bot-token
+              readOnly: true
+            - name: agent-state
+              mountPath: /sandbox
+              subPath: hermes
+      {{- end }}
+      volumes:
+        - name: openclaw-config
+          configMap:
+            name: {{ include "nemoclaw.fullname" . }}-openclaw-config
+        - name: gateway-token
+          secret:
+            secretName: {{ include "nemoclaw.fullname" . }}-gateway-token
+        - name: litellm-api-key
+          secret:
+            secretName: {{ include "nemoclaw.fullname" . }}-gateway-token
+        - name: tmp
+          emptyDir: {}
+        - name: agent-state
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "nemoclaw.fullname" . }}-agent-state
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

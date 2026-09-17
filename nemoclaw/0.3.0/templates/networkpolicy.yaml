@@ -1,0 +1,95 @@
+{{- /*
+  NemoClaw network layer: deny-by-default egress.
+  (docs/security/best-practices.mdx — "The sandbox blocks all outbound
+  connections unless you explicitly list the endpoint.")
+
+  Enforced by CS1's Calico CNI (verified live: baseline REACHED -> policy
+  BLOCKED). Standard networking.k8s.io/v1 — no projectcalico FQDN support on
+  CS1, so external hosts are pinned by IP (verified stable across 3
+  resolutions).
+
+  Egress allowlist (everything else is dropped):
+    * DNS          — kube-system (kube-dns), UDP+TCP 53
+    * Inference    — the LiteLLM proxy (litellmNamespace:4000) — the ONLY route
+                     to a model (NemoClaw inference layer: model traffic pinned
+                     to the single configured endpoint)
+    * Telegram     — api.telegram.org IPs, 443 (only when the channel is on)
+    * Istio mesh   — istio-system control plane (istiod xDS ports) + the
+                     ingress gateway pods (inbound dashboard traffic)
+  Ingress: dashboard port from the istio-system ingress gateway only.
+  (Verified: an ingress-restricting policy does not break kubelet probes
+  on CS1.)
+*/ -}}
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw.fullname" . }}-policy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "nemoclaw.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+        - protocol: TCP
+          port: {{ .Values.gateway.port }}
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Inference: the LiteLLM proxy (single configured endpoint)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.litellm.namespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.litellmPort }}
+    {{- if .Values.telegram.enabled }}
+    # Telegram Bot API (api.telegram.org, verified stable IPs)
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.telegramIPv4 }}
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.telegramIPv6 }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    # Istio control plane (sidecar xDS + certs) and ingress gateway
+    # (inbound dashboard traffic; also the sidecar's own egress path)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        - protocol: TCP
+          port: 15010
+        - protocol: TCP
+          port: 15012
+        - protocol: TCP
+          port: 15014
+        - protocol: TCP
+          port: 15020
+        - protocol: TCP
+          port: 443
+{{- end }}

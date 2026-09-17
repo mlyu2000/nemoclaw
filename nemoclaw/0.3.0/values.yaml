@@ -1,0 +1,189 @@
+# NemoClaw PCAI Helm chart v0.3.0 — HARDENED (NemoClaw security standards).
+#
+# Enforces the NemoClaw 5-layer security model (docs/security/best-practices.mdx)
+# to the extent achievable WITHOUT the OpenShell operator (BYOA/UI import only):
+#
+#   Network     — deny-by-default egress via NetworkPolicy (Calico enforces on CS1):
+#                DNS + LiteLLM + Telegram + Istio control plane only. Verified live.
+#   Filesystem  — readOnlyRootFilesystem (Landlock LSM is not enabled on CS1 nodes,
+#                so per the NemoClaw docs the fallback is DAC; RO root is stronger).
+#   Process     — non-root (uid 998), drop ALL caps, no-new-privileges, seccomp
+#                RuntimeDefault, nproc=512 / nofile=65536 ulimits (NemoClaw standard),
+#                image digest pinning (supply-chain standard).
+#   Gateway     — token auth, allowedOrigins pinned to the VS host (was "*"),
+#                AWS_EC2_METADATA_DISABLED=true (NemoClaw credential-discovery
+#                boundary), LiteLLM key stored in a Secret (not the ConfigMap).
+#   Inference   — egress allowlist pins model traffic to the single LiteLLM
+#                endpoint; no other inference provider is reachable.
+#
+# Documented deviations (BYOA limitations — see porting.md):
+#   * OpenShell operator unavailable -> no per-binary L7 egress, no TLS
+#     termination, no operator-approval flow, no landlock.
+#   * Image ships gcc/g++/make (NemoClaw purges them; image is immutable here).
+#   * dangerouslyDisableDeviceAuth stays true so the browser dashboard's
+#     auto-token flow works over the public VS host (NemoClaw prefers loopback
+#     + device auth; not possible with a platform-published dashboard URL).
+#
+# Mutually exclusive: exactly one agent container per pod (openclaw default).
+
+replicaCount: 1
+fullnameOverride: "nemoclaw-openclaw"
+
+agent: openclaw
+
+# ── Container image (OpenClaw) ───────────────────────────────────────────────
+# Digest-pinned (NemoClaw image-digest-pinning standard): the chart never
+# follows a mutable tag.
+image:
+  repository: ghcr.io/nvidia/openshell-community/sandboxes/openclaw
+  tag: latest
+  digest: sha256:b3d832b596ab6b7184a9dcb4ae93337ca32851a4f93b00765cc12de26baa3a9a
+  pullPolicy: IfNotPresent
+
+# ── Gateway (OpenClaw dashboard) ─────────────────────────────────────────────
+gateway:
+  port: 18789
+  bind: lan
+  token: "CHANGE_ME-GENERATED-AT-DEPLOY"
+  # Documented demo exception (see header): required for the browser
+  # auto-token flow on the published VS host.
+  dangerouslyDisableDeviceAuth: true
+  # NemoClaw standard: never "*". Pinned to the public VS host (baked at deploy).
+  allowedOrigins: "${RELEASE_NAME}.${DOMAIN_NAME}"
+
+litellm:
+  # REQUIRED — the full URL of your OpenAI-compatible LLM endpoint.
+  baseUrl: ""
+  # Namespace of the LiteLLM proxy — used by the egress NetworkPolicy.
+  namespace: "project-user-aieadmin"
+  model: "qwen3-8-27b-int4-dflash2-r2"
+  contextWindow: 131072
+  maxTokens: 8192
+  # Stored in the gateway-token Secret (mounted at boot into openclaw.json);
+  # never written to the ConfigMap.
+  apiKey: "CHANGE_ME-litellm-master-key"
+
+# ── Dashboard UI root (OpenClaw only) ────────────────────────────────────────
+ui:
+  root: "/sandbox/.openclaw/ui"
+
+# ── Telegram (governed: allowlist, not open) ─────────────────────────────────
+telegram:
+  enabled: true
+  # NemoClaw standard: never dmPolicy "open" / allowFrom ["*"].
+  allowAll: false
+  # Chat ids (DMs are positive ints, groups are -100...) allowed to talk to
+  # the bot. Bake your user id(s) here at deploy.
+  allowedChatIds:
+    - "-1002381931352"
+  botToken: "CHANGE_ME-telegram-bot-token"
+  testChatId: ""
+  testMessage: "NemoClaw Telegram channel is online (one-off validation)"
+
+# ── NemoClaw governance (in-process layer) ───────────────────────────────────
+governance:
+  # OpenClaw's tools.sandbox.tools.deny uses REPLACE semantics (verified live):
+  # the configured list REPLACES the built-in deny list, it does not add to
+  # it. So we render the COMPLETE deny list here — the full standard set of
+  # dangerous tools plus any you add. The `allow` key is deliberately OMITTED
+  # in the generated config so OpenClaw keeps its default working allow set
+  # (exec, process, read, write, edit, ...). Do not add an allow list here:
+  # an empty/partial allow would strip the agent's tools.
+  # Locked-down posture would also deny exec/process — that would neuter the
+  # agent's ability to act, so the default keeps exec and relies on the
+  # network/filesystem/process boundaries instead.
+  toolsDeny:
+    - browser
+    - canvas
+    - nodes
+    - cron
+    - gateway
+    - telegram
+    - whatsapp
+    - discord
+    - irc
+    - googlechat
+    - slack
+    - signal
+    - imessage
+    - line
+  # NemoClaw standard: elevated (high-privilege) tool channel disabled.
+  elevatedEnabled: false
+  # NemoClaw process-layer resource limits (applied best-effort in the
+  # entrypoint; the container runtime wins if it caps them lower).
+  nprocLimit: 512
+  nofileLimit: 65536
+
+# ── Network policy (deny-by-default egress) ──────────────────────────────────
+# Calico on CS1 enforces standard networking.k8s.io NetworkPolicy (verified:
+# baseline REACHED -> policy BLOCKED). FQDN matching is not available
+# (no projectcalico CRD), so external hosts are pinned by IP (verified stable
+# across 3 resolutions).
+networkPolicy:
+  enabled: true
+  litellmPort: 4000
+  telegramIPv4: "149.154.166.110/32"
+  telegramIPv6: "2001:67c:4e8:f004::9/128"
+
+# ── Hermes Agent (used when agent: hermes — NOT hardened in 0.3.0) ───────────
+hermes:
+  image:
+    repository: ghcr.io/nvidia/nemoclaw/hermes-sandbox
+    tag: latest
+    digest: sha256:0d07845fa3b02a0657d28e134eb2e1f4a96cc6260e2538f3d4eafe831c7e5c17
+    pullPolicy: IfNotPresent
+  apiPort: 8642
+  dashboardPort: 18790
+  apiServerKey: "CHANGE_ME-HERMES-API-KEY"
+  model: "qwen3-8-27b-int4-dflash2-r2"
+  dashboardAuth:
+    enabled: true
+    username: "admin"
+    password: ""  # empty -> random 24-char password generated at install
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+# ── Service ──────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 18789
+  hermesApiPort: 8642
+
+ingress:
+  enabled: true
+
+ezua:
+  virtualService:
+    # Single input for the external host. PCAI platform placeholder — the
+    # portal substitutes ${RELEASE_NAME} and ${DOMAIN_NAME} at import, so the
+    # VirtualService host, the "Open" button, and gateway.allowedOrigins all
+    # agree on the rendered host.
+    endpoint: "${RELEASE_NAME}.${DOMAIN_NAME}"
+    istioGateway: "istio-system/ezaf-gateway"
+
+persistence:
+  enabled: true
+  # Empty -> auto-detect the cluster default StorageClass.
+  storageClassName: ""
+  size: 10Gi
+
+# ── Resources (OpenClaw gateway) ────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+istioInjection: true
